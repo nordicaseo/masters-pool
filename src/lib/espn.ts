@@ -20,6 +20,7 @@
 import type { ScoringEventKind } from '@/db/schema';
 
 const LEADERBOARD_URL = 'https://site.api.espn.com/apis/site/v2/sports/golf/leaderboard';
+const SCHEDULE_URL = 'https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard';
 const COMPETITOR_SUMMARY_URL =
   'https://site.web.api.espn.com/apis/site/v2/sports/golf/pga/leaderboard';
 
@@ -126,7 +127,7 @@ function isMajor(name: string): boolean {
  * hammer ESPN every time someone opens the create form.
  */
 export async function fetchSeasonSchedule(year: number): Promise<ScheduledTournament[]> {
-  const url = `${LEADERBOARD_URL.replace('/leaderboard', '/scoreboard')}?league=pga&dates=${year}`;
+  const url = `${SCHEDULE_URL}?dates=${year}`;
   const res = await fetch(url, { next: { revalidate: 3600 } });
   if (!res.ok) {
     throw new Error(`ESPN scoreboard ${res.status} for year ${year}`);
