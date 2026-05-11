@@ -16,11 +16,15 @@ export default async function NewGamePage() {
     return [] as ScheduledTournament[];
   });
 
-  // Show upcoming + in-progress, ordered by date. Drop tournaments that
-  // already finished.
-  const selectable = tournaments
+  // Upcoming + live first, sorted by start date ascending.
+  // Past (post) below as a "test" section, sorted by start date descending
+  // so the most-recently-finished tournament is at the top.
+  const upcoming = tournaments
     .filter((t) => t.state !== 'post')
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
+  const past = tournaments
+    .filter((t) => t.state === 'post')
+    .sort((a, b) => b.startDate.localeCompare(a.startDate));
 
   return (
     <main className="fairway-bg min-h-screen">
@@ -39,7 +43,7 @@ export default async function NewGamePage() {
             Pick the tournament, set the rules, share the code with your group.
           </p>
         </header>
-        <CreateGameForm tournaments={selectable} />
+        <CreateGameForm upcoming={upcoming} past={past} />
       </div>
     </main>
   );

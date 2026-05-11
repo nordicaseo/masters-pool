@@ -23,13 +23,12 @@ export async function createGameWithField(input: {
     if (i === MAX_CODE_RETRIES - 1) throw new Error('Could not generate a unique game code');
   }
 
-  // 2. Pull the field from ESPN before creating the game so we fail fast
-  //    if the event id is bogus.
+  // 2. Pull the field from ESPN so we fail fast if the event id is bogus.
+  //    An empty field is OK and expected for tournaments more than a day or
+  //    two out (ESPN doesn't publish the tee sheet that early). The cron
+  //    will seed the field once it appears.
   const lb = await fetchLeaderboard(input.espnEventId);
   const { field } = parseField(lb);
-  if (field.length === 0) {
-    throw new Error(`ESPN returned no competitors for event ${input.espnEventId}`);
-  }
 
   // 3. Create the game row.
   const [game] = await db
@@ -44,18 +43,22 @@ export async function createGameWithField(input: {
     })
     .returning();
 
-  // 4. Seed the field.
-  await db.insert(golfers).values(
-    field.map((f) => ({
-      gameId: game.id,
-      espnAthleteId: f.espnAthleteId,
-      name: f.name,
-      country: f.country,
-      position: f.position,
-      scoreToPar: f.scoreToPar,
-      missedCut: f.missedCut ? 1 : 0,
-    })),
-  );
+  // 4. Seed the field if ESPN has it. Otherwise leave golfers empty;
+  //    syncGame() in src/lib/scoring.ts will upsert them when the field
+  //    is published.
+  if (field.length > 0) {
+    await db.insert(golfers).values(
+      field.map((f) => ({
+        gameId: game.id,
+        espnAthleteId: f.espnAthleteId,
+        name: f.name,
+        country: f.country,
+        position: f.position,
+        scoreToPar: f.scoreToPar,
+        missedCut: f.missedCut ? 1 : 0,
+      })),
+    );
+  }
 
   // 5. Create the creator as the first participant.
   const [creator] = await db
