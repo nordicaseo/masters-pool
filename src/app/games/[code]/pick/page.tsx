@@ -50,18 +50,24 @@ export default async function PickPage(props: PageProps<'/games/[code]/pick'>) {
   });
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-12 text-zinc-900 dark:text-zinc-100">
-      <header className="mb-6 space-y-1">
-        <h1 className="text-3xl font-bold tracking-tight">Pick {game.scoringRules.picks_per_user} golfers</h1>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          Hi {me.displayName} — once you submit, your picks are locked for the rest of the tournament.
+    <main className="min-h-screen bg-cream dark:bg-zinc-950">
+      <div className="mx-auto max-w-3xl px-6 py-10">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-fairway-deep dark:text-fairway-light">
+          {game.tournamentName}
         </p>
-      </header>
-      <PickForm
-        gameCode={game.code}
-        picksRequired={game.scoringRules.picks_per_user}
-        field={sortedField}
-      />
+        <h1 className="mt-1 font-display text-4xl font-black tracking-tight">
+          Pick {game.scoringRules.picks_per_user} golfers
+        </h1>
+        <p className="mt-2 mb-8 text-sm text-zinc-600 dark:text-zinc-400">
+          Hi <span className="font-semibold">{me.displayName}</span> — once
+          you submit, your picks are locked for the rest of the tournament.
+        </p>
+        <PickForm
+          gameCode={game.code}
+          picksRequired={game.scoringRules.picks_per_user}
+          field={sortedField}
+        />
+      </div>
     </main>
   );
 }
