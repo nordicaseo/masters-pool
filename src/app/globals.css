@@ -1,26 +1,67 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #fafaf6;
+  --foreground: #1a1f1c;
+
+  /* Course palette (raw values; mapped to theme tokens below). */
+  --fairway: #15803d;
+  --fairway-deep: #14532d;
+  --fairway-light: #dcfce7;
+  --sand: #d4a574;
+  --sand-light: #f5ebd9;
+  --flag: #dc2626;
+  --podium: #f59e0b;
+  --podium-soft: #fef3c7;
+  --cream: #fafaf6;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-fairway: var(--fairway);
+  --color-fairway-deep: var(--fairway-deep);
+  --color-fairway-light: var(--fairway-light);
+  --color-sand: var(--sand);
+  --color-sand-light: var(--sand-light);
+  --color-flag: var(--flag);
+  --color-podium: var(--podium);
+  --color-podium-soft: var(--podium-soft);
+  --color-cream: var(--cream);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-fraunces);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #0c1410;
+    --foreground: #e7f5ec;
+    --fairway-light: #14532d;
+    --sand-light: #4a3c28;
+    --podium-soft: #422006;
+    --cream: #0c1410;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/* Soft course-light gradient used behind heroes. */
+.fairway-bg {
+  background-image:
+    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(21, 128, 61, 0.12), transparent 60%),
+    radial-gradient(ellipse 60% 50% at 90% 80%, rgba(212, 165, 116, 0.18), transparent 60%);
+}
+
+/* Scorecard-style header gradient. */
+.scorecard-stripe {
+  background-image: linear-gradient(
+    90deg,
+    var(--fairway-deep) 0%,
+    var(--fairway) 100%
+  );
 }

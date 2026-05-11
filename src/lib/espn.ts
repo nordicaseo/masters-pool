@@ -89,6 +89,68 @@ export async function fetchCompetitorSummary(
   return (await res.json()) as EspnCompetitorSummary;
 }
 
+// ---------- season schedule ----------
+
+export type ScheduledTournament = {
+  espnEventId: string;
+  name: string;
+  shortName: string;
+  startDate: string; // ISO
+  state: TournamentState;
+  isMajor: boolean;
+};
+
+const MAJOR_NAMES = [
+  'masters tournament',
+  'pga championship',
+  'u.s. open',
+  'us open',
+  'the open championship',
+  'open championship',
+];
+
+function isMajor(name: string): boolean {
+  const lower = name.toLowerCase();
+  return MAJOR_NAMES.some((m) => lower === m || lower.startsWith(m));
+}
+
+/**
+ * Fetch the full PGA Tour schedule for a given calendar year and return a
+ * normalized, lightweight summary suitable for the create-game picker.
+ *
+ * ESPN returns events for the year sorted roughly by date, including
+ * tournaments that have already finished. We pass the raw list through;
+ * callers filter to upcoming/live as needed.
+ *
+ * Cached for an hour — the schedule barely changes, and we don't want to
+ * hammer ESPN every time someone opens the create form.
+ */
+export async function fetchSeasonSchedule(year: number): Promise<ScheduledTournament[]> {
+  const url = `${LEADERBOARD_URL.replace('/leaderboard', '/scoreboard')}?league=pga&dates=${year}`;
+  const res = await fetch(url, { next: { revalidate: 3600 } });
+  if (!res.ok) {
+    throw new Error(`ESPN scoreboard ${res.status} for year ${year}`);
+  }
+  const data = (await res.json()) as {
+    events?: Array<{
+      id: string;
+      name: string;
+      shortName?: string;
+      date: string;
+      status?: { type?: { state?: TournamentState } };
+    }>;
+  };
+  const events = data.events ?? [];
+  return events.map((e) => ({
+    espnEventId: e.id,
+    name: e.name,
+    shortName: e.shortName ?? e.name,
+    startDate: e.date,
+    state: (e.status?.type?.state ?? 'pre') as TournamentState,
+    isMajor: isMajor(e.name),
+  }));
+}
+
 // ---------- parsing ----------
 
 export type FieldRow = {

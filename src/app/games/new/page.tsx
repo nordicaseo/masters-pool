@@ -1,15 +1,46 @@
+import Link from 'next/link';
+import { fetchSeasonSchedule, type ScheduledTournament } from '@/lib/espn';
+import { logError } from '@/lib/log';
 import { CreateGameForm } from './create-game-form';
 
 export const dynamic = 'force-dynamic';
 
-export default function NewGamePage() {
+export default async function NewGamePage() {
+  const year = new Date().getUTCFullYear();
+  const tournaments = await fetchSeasonSchedule(year).catch((err) => {
+    logError(err, {
+      subsystem: 'espn',
+      operation: 'fetch_season_schedule',
+      extra: { year },
+    });
+    return [] as ScheduledTournament[];
+  });
+
+  // Show upcoming + in-progress, ordered by date. Drop tournaments that
+  // already finished.
+  const selectable = tournaments
+    .filter((t) => t.state !== 'post')
+    .sort((a, b) => a.startDate.localeCompare(b.startDate));
+
   return (
-    <main className="mx-auto max-w-2xl px-6 py-16 text-zinc-900 dark:text-zinc-100">
-      <h1 className="mb-2 text-3xl font-bold">Create a pool</h1>
-      <p className="mb-8 text-zinc-600 dark:text-zinc-400">
-        Defaults are set for the 2026 Masters. You can tweak the scoring, then share the join code with your group.
-      </p>
-      <CreateGameForm />
+    <main className="fairway-bg min-h-screen">
+      <div className="mx-auto max-w-3xl px-6 py-12">
+        <Link
+          href="/"
+          className="mb-6 inline-flex items-center gap-1 text-sm text-zinc-600 transition hover:text-fairway dark:text-zinc-400"
+        >
+          ← Back
+        </Link>
+        <header className="mb-8 space-y-2">
+          <h1 className="font-display text-4xl font-black tracking-tight">
+            Start a new pool
+          </h1>
+          <p className="text-zinc-600 dark:text-zinc-400">
+            Pick the tournament, set the rules, share the code with your group.
+          </p>
+        </header>
+        <CreateGameForm tournaments={selectable} />
+      </div>
     </main>
   );
 }

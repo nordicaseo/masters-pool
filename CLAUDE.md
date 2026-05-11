@@ -88,12 +88,13 @@ When creating a PR with a checklist (e.g. lint, test, build), check off steps th
 ### Frontend
 - React 19 with Next.js 16 App Router. Path alias `@/*` maps to `./src/*`.
 - Tailwind CSS v4. No component library — keep it minimal, hand-rolled HTML + Tailwind. lucide-react icons if/when needed.
+- Custom theme tokens in `src/app/globals.css`: course palette (`fairway`, `fairway-deep`, `fairway-light`, `sand`, `sand-light`, `flag`, `podium`, `podium-soft`, `cream`) and a display font (`font-display` → Fraunces). Raw CSS vars live on `:root`; `@theme inline` maps them to Tailwind utilities so dark-mode overrides via `prefers-color-scheme` still apply.
 - Routes:
-  - `/` — landing: create a new game OR join an existing one.
-  - `/games/new` — create form (configure scoring rules + tournament).
-  - `/games/[code]` — game home: leaderboards + invite link.
+  - `/` — landing: golf-themed hero, join form, and link to create.
+  - `/games/new` — create form. Server-side fetches the PGA season schedule via `fetchSeasonSchedule(year)` (in `src/lib/espn.ts`) and renders upcoming/in-progress events as selectable cards. The picker auto-fills the ESPN event id + tournament name; if ESPN is unreachable the form falls back to a manual entry block.
+  - `/games/[code]` — game home: scorecard-style leaderboards (pool + field) with a "Public pool" badge.
   - `/games/[code]/join` — display-name picker.
-  - `/games/[code]/pick` — pick 3 golfers (only if you haven't yet).
+  - `/games/[code]/pick` — pick N golfers (only if you haven't yet).
 
 ### Next.js 16 Notes (Important)
 - `params` and `searchParams` in `page.tsx` and `route.ts` files are **promises** — always `await` them.

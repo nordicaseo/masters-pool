@@ -34,33 +34,40 @@ export function JoinForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row">
-      <input
-        type="text"
-        placeholder="Game code"
-        value={code}
-        onChange={(e) => setCode(e.target.value.toUpperCase())}
-        maxLength={10}
-        className="h-11 w-full rounded-md border border-zinc-300 bg-white px-3 font-mono text-base uppercase tracking-wider text-zinc-900 outline-none focus:border-emerald-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-        required
-      />
-      <input
-        type="text"
-        placeholder="Your name"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        maxLength={40}
-        className="h-11 w-full rounded-md border border-zinc-300 bg-white px-3 text-base text-zinc-900 outline-none focus:border-emerald-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-        required
-      />
-      <button
-        type="submit"
-        disabled={submitting}
-        className="h-11 rounded-md bg-zinc-900 px-6 font-medium text-white transition hover:bg-zinc-700 disabled:opacity-50 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-      >
-        {submitting ? 'Joining…' : 'Join'}
-      </button>
-      {error ? <p className="text-sm text-red-600 sm:basis-full">{error}</p> : null}
+    <form
+      onSubmit={handleSubmit}
+      className="rounded-2xl border border-fairway-deep/15 bg-white p-4 shadow-sm dark:border-fairway-light/20 dark:bg-zinc-900"
+    >
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <input
+          type="text"
+          placeholder="GAME CODE"
+          value={code}
+          onChange={(e) => setCode(e.target.value.toUpperCase())}
+          maxLength={10}
+          className="h-12 w-full rounded-lg border border-zinc-200 bg-cream px-4 font-mono text-base uppercase tracking-[0.25em] text-zinc-900 outline-none transition focus:border-fairway focus:ring-2 focus:ring-fairway/30 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+          required
+        />
+        <input
+          type="text"
+          placeholder="Your name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={40}
+          className="h-12 w-full rounded-lg border border-zinc-200 bg-cream px-4 text-base text-zinc-900 outline-none transition focus:border-fairway focus:ring-2 focus:ring-fairway/30 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+          required
+        />
+        <button
+          type="submit"
+          disabled={submitting}
+          className="h-12 rounded-lg bg-fairway-deep px-6 font-semibold text-white transition hover:bg-fairway disabled:opacity-50"
+        >
+          {submitting ? 'Joining…' : 'Join'}
+        </button>
+      </div>
+      {error ? (
+        <p className="mt-3 text-sm font-medium text-flag">{error}</p>
+      ) : null}
     </form>
   );
 }

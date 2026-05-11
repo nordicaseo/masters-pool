@@ -10,10 +10,19 @@ export default async function JoinPage(props: PageProps<'/games/[code]/join'>) {
   if (!game) notFound();
 
   return (
-    <main className="mx-auto max-w-md px-6 py-16 text-zinc-900 dark:text-zinc-100">
-      <h1 className="mb-2 text-3xl font-bold">{game.name}</h1>
-      <p className="mb-8 text-sm text-zinc-600 dark:text-zinc-400">{game.tournamentName}</p>
-      <JoinNamedForm code={game.code} />
+    <main className="fairway-bg min-h-screen">
+      <div className="mx-auto max-w-md px-6 py-16">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-fairway-deep dark:text-fairway-light">
+          {game.tournamentName}
+        </p>
+        <h1 className="mt-1 font-display text-4xl font-black tracking-tight">
+          {game.name}
+        </h1>
+        <p className="mt-2 mb-8 text-sm text-zinc-600 dark:text-zinc-400">
+          Drop your name to claim a spot, then lock in your 3 picks.
+        </p>
+        <JoinNamedForm code={game.code} />
+      </div>
     </main>
   );
 }

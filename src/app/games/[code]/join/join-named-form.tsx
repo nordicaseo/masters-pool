@@ -33,7 +33,10 @@ export function JoinNamedForm({ code }: { code: string }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-3 rounded-2xl border border-fairway-deep/15 bg-white p-4 shadow-sm dark:border-fairway-light/20 dark:bg-zinc-900"
+    >
       <input
         type="text"
         placeholder="Your name"
@@ -41,16 +44,18 @@ export function JoinNamedForm({ code }: { code: string }) {
         onChange={(e) => setName(e.target.value)}
         maxLength={40}
         required
-        className="h-11 w-full rounded-md border border-zinc-300 bg-white px-3 dark:border-zinc-700 dark:bg-zinc-900"
+        className="h-12 w-full rounded-lg border border-zinc-200 bg-cream px-3 outline-none transition focus:border-fairway focus:ring-2 focus:ring-fairway/30 dark:border-zinc-700 dark:bg-zinc-950"
       />
       <button
         type="submit"
         disabled={submitting}
-        className="h-11 w-full rounded-md bg-emerald-600 px-6 font-medium text-white transition hover:bg-emerald-700 disabled:opacity-50"
+        className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-fairway px-6 font-semibold text-white shadow-sm transition hover:bg-fairway-deep disabled:opacity-50"
       >
-        {submitting ? 'Joining…' : 'Join the pool'}
+        {submitting ? 'Joining…' : 'Join the pool'} <span>→</span>
       </button>
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {error ? (
+        <p className="text-sm font-medium text-flag">{error}</p>
+      ) : null}
     </form>
   );
 }
