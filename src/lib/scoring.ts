@@ -72,11 +72,6 @@ export async function syncGame(gameId: number): Promise<{ updated: number; event
     updatedGolfers += await upsertGolfer(gameId, row);
   }
 
-  // Update game status if changed.
-  if (state !== game.status) {
-    await db.update(games).set({ status: state }).where(eq(games.id, gameId));
-  }
-
   // 2. Fetch per-hole events only for golfers actually picked by someone.
   const pickedGolferIds = await pickedGolfersForGame(gameId);
   let newEvents = 0;
@@ -99,6 +94,17 @@ export async function syncGame(gameId: number): Promise<{ updated: number; event
   // 4. Finish bonuses — only when the tournament is final.
   if (state === 'post') {
     newEvents += await awardFinishBonuses(gameId, field, game.scoringRules);
+  }
+
+  // 5. Commit the new status last. The cron filter skips games with
+  //    status='post', so if we set 'post' earlier and a downstream step
+  //    (hole sync, missed-cut markers, finish bonuses) threw, the game
+  //    would be marked final but missing events — and never retried.
+  //    By updating status only after all event-writing work has succeeded,
+  //    any partial failure leaves the previous status in place and the
+  //    next cron tick re-runs the whole sync idempotently.
+  if (state !== game.status) {
+    await db.update(games).set({ status: state }).where(eq(games.id, gameId));
   }
 
   logInfo('game synced', {
