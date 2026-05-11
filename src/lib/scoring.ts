@@ -245,11 +245,36 @@ async function writeMissedCutMarkers(
   return inserted;
 }
 
-async function awardFinishBonuses(
-  gameId: number,
+export type FinishBonusAward = {
+  kind: ScoringEventKind;
+  espnAthleteId: string;
+  points: number;
+};
+
+/**
+ * Pure computation of finish bonuses from a parsed leaderboard.
+ *
+ * Walks the field in finishing order and assigns each bucket of tied
+ * golfers a per-golfer point value based on the game's `tie_handling`:
+ *
+ *   - `split_floor`: the tied bucket absorbs the sum of the places it
+ *     spans (e.g. 4-way tie at 1st spans finish_1+finish_2+finish_3) and
+ *     the pool is divided evenly with `Math.floor`.
+ *   - `full`: every tied golfer gets the point value of the **highest**
+ *     place they're tied at (e.g. 4-way tie at 1st pays `finish_1` to
+ *     each). Lower contested places are not paid out — this matches the
+ *     natural reading of "full to each tied golfer" and avoids the
+ *     previous behavior of paying each tied golfer the *sum* of all
+ *     spanned places (which inflated payouts way past the intended pool).
+ *
+ * The event `kind` is always the highest place in the bucket so that
+ * the `(game_id, golfer_id, kind, round, hole)` idempotency key stays
+ * stable across re-runs.
+ */
+export function computeFinishBonuses(
   field: FieldRow[],
   rules: ScoringRules,
-): Promise<number> {
+): FinishBonusAward[] {
   // Group by numeric position (strip "T" prefix). Skip cut/withdrawn.
   const eligible = field
     .filter((f) => !f.missedCut && f.position && /^T?\d+$/.test(f.position))
@@ -264,38 +289,48 @@ async function awardFinishBonuses(
     else buckets.push({ posNum: r.posNum, rows: [r] });
   }
 
-  // Walk podium positions 1, 2, 3 — accounting for ties.
-  const podium: Array<{ kind: ScoringEventKind; rows: typeof eligible; points: number }> = [];
+  const placeKinds: ScoringEventKind[] = ['finish_1', 'finish_2', 'finish_3'];
+  const awards: FinishBonusAward[] = [];
   let positionFilled = 0;
   for (const bucket of buckets) {
-    if (positionFilled >= 3) break;
-    const placeKinds: ScoringEventKind[] = ['finish_1', 'finish_2', 'finish_3'];
+    if (positionFilled >= placeKinds.length) break;
     // The current bucket occupies positions [positionFilled+1 .. positionFilled+bucket.rows.length].
-    const filledPositions = placeKinds
-      .slice(positionFilled, positionFilled + bucket.rows.length)
-      .filter(Boolean);
+    const filledPositions = placeKinds.slice(
+      positionFilled,
+      positionFilled + bucket.rows.length,
+    );
     if (filledPositions.length === 0) {
       positionFilled += bucket.rows.length;
       continue;
     }
-    const totalPoints = filledPositions
-      .map((k) => pointsForKind(rules, k))
-      .reduce((a, b) => a + b, 0);
+    const eventKind = filledPositions[0]!;
     const perGolfer =
       rules.tie_handling === 'split_floor'
-        ? Math.floor(totalPoints / bucket.rows.length)
-        : totalPoints;
-    // Use the highest finishing kind in the bucket as the event kind so the
-    // idempotency key stays stable across re-runs.
-    const eventKind = filledPositions[0]!;
-    podium.push({ kind: eventKind, rows: bucket.rows, points: perGolfer });
+        ? Math.floor(
+            filledPositions
+              .map((k) => pointsForKind(rules, k))
+              .reduce((a, b) => a + b, 0) / bucket.rows.length,
+          )
+        : pointsForKind(rules, eventKind);
+    for (const row of bucket.rows) {
+      awards.push({ kind: eventKind, espnAthleteId: row.espnAthleteId, points: perGolfer });
+    }
     positionFilled += bucket.rows.length;
   }
 
-  if (podium.length === 0) return 0;
+  return awards;
+}
+
+async function awardFinishBonuses(
+  gameId: number,
+  field: FieldRow[],
+  rules: ScoringRules,
+): Promise<number> {
+  const awards = computeFinishBonuses(field, rules);
+  if (awards.length === 0) return 0;
 
   // Resolve athlete ids → golfer ids.
-  const allAthleteIds = podium.flatMap((p) => p.rows.map((r) => r.espnAthleteId));
+  const allAthleteIds = awards.map((a) => a.espnAthleteId);
   const golferRows = await db
     .select({ id: golfers.id, espnAthleteId: golfers.espnAthleteId })
     .from(golfers)
@@ -303,24 +338,22 @@ async function awardFinishBonuses(
   const byAthlete = new Map(golferRows.map((g) => [g.espnAthleteId, g.id]));
 
   let inserted = 0;
-  for (const place of podium) {
-    for (const row of place.rows) {
-      const golferId = byAthlete.get(row.espnAthleteId);
-      if (!golferId) continue;
-      const r = await db
-        .insert(scoringEvents)
-        .values({
-          gameId,
-          golferId,
-          kind: place.kind,
-          round: 0,
-          hole: 0,
-          points: place.points,
-        })
-        .onConflictDoNothing()
-        .returning({ id: scoringEvents.id });
-      inserted += r.length;
-    }
+  for (const award of awards) {
+    const golferId = byAthlete.get(award.espnAthleteId);
+    if (!golferId) continue;
+    const r = await db
+      .insert(scoringEvents)
+      .values({
+        gameId,
+        golferId,
+        kind: award.kind,
+        round: 0,
+        hole: 0,
+        points: award.points,
+      })
+      .onConflictDoNothing()
+      .returning({ id: scoringEvents.id });
+    inserted += r.length;
   }
   return inserted;
 }
