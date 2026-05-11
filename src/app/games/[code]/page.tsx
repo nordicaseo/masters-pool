@@ -51,7 +51,7 @@ export default async function GamePage(props: PageProps<'/games/[code]'>) {
           ) : (
             <ol className="space-y-2">
               {users.map((u, i) => (
-                <ParticipantRow key={u.participantId} rank={i + 1} participant={u} />
+                <ParticipantRow key={u.participantId} rank={i + 1} participant={u} gameCode={game.code} />
               ))}
             </ol>
           )}
@@ -59,7 +59,11 @@ export default async function GamePage(props: PageProps<'/games/[code]'>) {
 
         <section>
           <SectionHeader title="Field leaderboard" subtitle={`${golfers.length} golfers`} />
-          <FieldScorecard golfers={golfers} />
+          {golfers.length === 0 ? (
+            <EmptyState message="Field publishes a day or two before the tournament — check back closer to round 1." />
+          ) : (
+            <FieldScorecard gameCode={game.code} golfers={golfers} />
+          )}
         </section>
       </div>
     </main>
@@ -151,7 +155,15 @@ type ParticipantRow = {
   picks: Array<{ golferId: number; name: string; points: number; missedCut: boolean; position: string | null }>;
 };
 
-function ParticipantRow({ rank, participant }: { rank: number; participant: ParticipantRow }) {
+function ParticipantRow({
+  rank,
+  participant,
+  gameCode,
+}: {
+  rank: number;
+  participant: ParticipantRow;
+  gameCode: string;
+}) {
   const beers = participant.picks.filter((p) => p.missedCut).length;
   return (
     <li className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm transition hover:border-fairway/40 dark:border-zinc-800 dark:bg-zinc-900">
@@ -177,7 +189,7 @@ function ParticipantRow({ rank, participant }: { rank: number; participant: Part
       {participant.picks.length > 0 ? (
         <div className="flex flex-wrap gap-1.5 border-t border-zinc-100 bg-zinc-50/60 px-4 py-2.5 dark:border-zinc-800 dark:bg-zinc-950/40">
           {participant.picks.map((p) => (
-            <PickChip key={p.golferId} pick={p} />
+            <PickChip key={p.golferId} pick={p} gameCode={gameCode} />
           ))}
         </div>
       ) : null}
@@ -203,15 +215,18 @@ function RankBadge({ rank }: { rank: number }) {
 
 function PickChip({
   pick,
+  gameCode,
 }: {
-  pick: { name: string; points: number; missedCut: boolean; position: string | null };
+  pick: { golferId: number; name: string; points: number; missedCut: boolean; position: string | null };
+  gameCode: string;
 }) {
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ${
+    <Link
+      href={`/games/${gameCode}/golfer/${pick.golferId}`}
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition hover:ring-fairway/60 ${
         pick.missedCut
           ? 'bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200'
-          : 'bg-white text-zinc-800 ring-1 ring-zinc-200 dark:bg-zinc-900 dark:text-zinc-100 dark:ring-zinc-700'
+          : 'bg-white text-zinc-800 ring-1 ring-zinc-200 hover:ring-fairway dark:bg-zinc-900 dark:text-zinc-100 dark:ring-zinc-700'
       }`}
     >
       <span className="font-medium">{pick.name}</span>
@@ -230,13 +245,15 @@ function PickChip({
         {pick.points >= 0 ? `+${pick.points}` : pick.points}
       </span>
       {pick.missedCut ? <span>🍺</span> : null}
-    </span>
+    </Link>
   );
 }
 
 function FieldScorecard({
+  gameCode,
   golfers,
 }: {
+  gameCode: string;
   golfers: Array<{
     golferId: number;
     name: string;
@@ -257,31 +274,33 @@ function FieldScorecard({
       </div>
       <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
         {golfers.map((g) => (
-          <li
-            key={g.golferId}
-            className="grid grid-cols-[3.5rem_1fr_4rem_4.5rem] items-center gap-2 px-4 py-2 text-sm sm:grid-cols-[4rem_1fr_5rem_5rem]"
-          >
-            <span className="font-mono text-xs font-semibold text-zinc-500">
-              {g.position ?? '—'}
-            </span>
-            <span className="truncate">
-              {g.name}
-              {g.missedCut ? <span className="ml-1">🍺</span> : null}
-            </span>
-            <span className="text-right">
-              <ScoreToPar value={g.scoreToPar} />
-            </span>
-            <span
-              className={`text-right font-mono font-semibold tabular-nums ${
-                g.points > 0
-                  ? 'text-fairway'
-                  : g.points < 0
-                    ? 'text-flag'
-                    : 'text-zinc-500'
-              }`}
+          <li key={g.golferId}>
+            <Link
+              href={`/games/${gameCode}/golfer/${g.golferId}`}
+              className="grid grid-cols-[3.5rem_1fr_4rem_4.5rem] items-center gap-2 px-4 py-2 text-sm transition hover:bg-fairway-light/30 dark:hover:bg-fairway-deep/20 sm:grid-cols-[4rem_1fr_5rem_5rem]"
             >
-              {g.points}
-            </span>
+              <span className="font-mono text-xs font-semibold text-zinc-500">
+                {g.position ?? '—'}
+              </span>
+              <span className="truncate">
+                {g.name}
+                {g.missedCut ? <span className="ml-1">🍺</span> : null}
+              </span>
+              <span className="text-right">
+                <ScoreToPar value={g.scoreToPar} />
+              </span>
+              <span
+                className={`text-right font-mono font-semibold tabular-nums ${
+                  g.points > 0
+                    ? 'text-fairway'
+                    : g.points < 0
+                      ? 'text-flag'
+                      : 'text-zinc-500'
+                }`}
+              >
+                {g.points}
+              </span>
+            </Link>
           </li>
         ))}
       </ul>

@@ -11,11 +11,19 @@ const DATE_FMT = new Intl.DateTimeFormat('en-US', {
   year: 'numeric',
 });
 
-export function CreateGameForm({ tournaments }: { tournaments: ScheduledTournament[] }) {
+export function CreateGameForm({
+  upcoming,
+  past,
+}: {
+  upcoming: ScheduledTournament[];
+  past: ScheduledTournament[];
+}) {
   const router = useRouter();
+  const tournaments = useMemo(() => [...upcoming, ...past], [upcoming, past]);
   const [selectedEventId, setSelectedEventId] = useState<string>(
-    tournaments[0]?.espnEventId ?? '',
+    upcoming[0]?.espnEventId ?? past[0]?.espnEventId ?? '',
   );
+  const [showPast, setShowPast] = useState(false);
   const [manualEventId, setManualEventId] = useState('');
   const [manualName, setManualName] = useState('');
   const [poolName, setPoolName] = useState('');
@@ -100,15 +108,53 @@ export function CreateGameForm({ tournaments }: { tournaments: ScheduledTourname
             setName={setManualName}
           />
         ) : (
-          <div className="grid gap-2 sm:grid-cols-2">
-            {tournaments.map((t) => (
-              <TournamentCard
-                key={t.espnEventId}
-                tournament={t}
-                selected={selectedEventId === t.espnEventId}
-                onSelect={() => setSelectedEventId(t.espnEventId)}
-              />
-            ))}
+          <div className="space-y-4">
+            {upcoming.length > 0 ? (
+              <div className="space-y-2">
+                <SectionLabel>Upcoming &amp; live</SectionLabel>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {upcoming.map((t) => (
+                    <TournamentCard
+                      key={t.espnEventId}
+                      tournament={t}
+                      selected={selectedEventId === t.espnEventId}
+                      onSelect={() => setSelectedEventId(t.espnEventId)}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {past.length > 0 ? (
+              <div className="space-y-2 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/40 p-3 dark:border-zinc-700 dark:bg-zinc-900/40">
+                <button
+                  type="button"
+                  onClick={() => setShowPast((s) => !s)}
+                  className="flex w-full items-center justify-between text-left text-sm font-medium transition"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                      Past · for testing
+                    </span>
+                    <span className="text-zinc-600 dark:text-zinc-400">
+                      Replay a finished tournament to see scoring &amp; leaderboards populate
+                    </span>
+                  </span>
+                  <span className="text-zinc-400">{showPast ? '−' : '+'}</span>
+                </button>
+                {showPast ? (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {past.map((t) => (
+                      <TournamentCard
+                        key={t.espnEventId}
+                        tournament={t}
+                        selected={selectedEventId === t.espnEventId}
+                        onSelect={() => setSelectedEventId(t.espnEventId)}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         )}
       </Step>
@@ -250,6 +296,7 @@ function TournamentCard({
 }) {
   const date = new Date(tournament.startDate);
   const isLive = tournament.state === 'in';
+  const isPost = tournament.state === 'post';
   return (
     <button
       type="button"
@@ -281,6 +328,11 @@ function TournamentCard({
             <span className="inline-flex items-center gap-1 rounded-full bg-flag px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
               Live
+            </span>
+          ) : null}
+          {isPost ? (
+            <span className="rounded-full bg-zinc-200 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+              Final
             </span>
           ) : null}
         </div>
