@@ -1,61 +1,53 @@
-import { cookies } from 'next/headers';
-import { createHmac, timingSafeEqual } from 'node:crypto';
-import { logError } from './log';
+import { auth } from '@clerk/nextjs/server';
+import { and, eq } from 'drizzle-orm';
+import { db } from '@/db';
+import { participants } from '@/db/schema';
 
-const COOKIE_NAME = 'mp_user';
-const MAX_AGE_SECONDS = 60 * 60 * 24 * 90; // 90 days
+/**
+ * Resolve the current Clerk user's `participants` row inside a given
+ * game, if any. Returns null when:
+ *   - the user is not signed in, or
+ *   - the user has not joined this game yet.
+ *
+ * Legacy participants (created before Clerk was added) have `user_id = NULL`
+ * and are not reachable via this helper. They'll show up on leaderboards
+ * but the original creator has to re-join with their Clerk account to
+ * regain write access. That's an acceptable one-time migration cost.
+ */
+export async function getParticipantForGame(gameId: number): Promise<{
+  id: number;
+  userId: string;
+  displayName: string;
+  picksLocked: number;
+} | null> {
+  const { userId } = await auth();
+  if (!userId) return null;
 
-function getSecret(): string {
-  const s = process.env.AUTH_SECRET;
-  if (!s) throw new Error('AUTH_SECRET is not set');
-  return s;
+  const [row] = await db
+    .select({
+      id: participants.id,
+      userId: participants.userId,
+      displayName: participants.displayName,
+      picksLocked: participants.picksLocked,
+    })
+    .from(participants)
+    .where(and(eq(participants.userId, userId), eq(participants.gameId, gameId)))
+    .limit(1);
+  if (!row || row.userId === null) return null;
+  return {
+    id: row.id,
+    userId: row.userId,
+    displayName: row.displayName,
+    picksLocked: row.picksLocked,
+  };
 }
 
-function sign(value: string): string {
-  return createHmac('sha256', getSecret()).update(value).digest('hex');
-}
-
-function pack(participantId: number): string {
-  const v = String(participantId);
-  return `${v}.${sign(v)}`;
-}
-
-function unpack(raw: string): number | null {
-  const idx = raw.indexOf('.');
-  if (idx < 0) return null;
-  const v = raw.slice(0, idx);
-  const sig = raw.slice(idx + 1);
-  const expected = sign(v);
-  if (sig.length !== expected.length) return null;
-  try {
-    if (!timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
-  } catch (error) {
-    logError(error, { subsystem: 'auth', operation: 'verify_cookie' });
-    return null;
-  }
-  const id = Number(v);
-  return Number.isInteger(id) && id > 0 ? id : null;
-}
-
-export async function setParticipantCookie(participantId: number): Promise<void> {
-  const jar = await cookies();
-  jar.set(COOKIE_NAME, pack(participantId), {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: MAX_AGE_SECONDS,
-  });
-}
-
-export async function clearParticipantCookie(): Promise<void> {
-  const jar = await cookies();
-  jar.delete(COOKIE_NAME);
-}
-
-export async function getParticipantId(): Promise<number | null> {
-  const jar = await cookies();
-  const raw = jar.get(COOKIE_NAME)?.value;
-  if (!raw) return null;
-  return unpack(raw);
+/**
+ * Get the currently authenticated Clerk user id. Throws if not signed in
+ * (intended for use inside route handlers that have already gated on auth).
+ */
+export async function requireUserId(): Promise<string> {
+  const { userId } = await auth();
+  if (!userId) throw new Error('not signed in');
+  return userId;
 }

@@ -3,9 +3,15 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-export function JoinNamedForm({ code }: { code: string }) {
+export function JoinNamedForm({
+  code,
+  suggestedName,
+}: {
+  code: string;
+  suggestedName?: string;
+}) {
   const router = useRouter();
-  const [name, setName] = useState('');
+  const [name, setName] = useState(suggestedName ?? '');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

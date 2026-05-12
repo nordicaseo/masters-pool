@@ -21,7 +21,8 @@ export const createGameSchema = z.object({
   name: z.string().min(1).max(80),
   espnEventId: z.string().min(1).max(40),
   tournamentName: z.string().min(1).max(120),
-  createdByName: z.string().min(1).max(40),
+  // Optional — falls back to the Clerk profile name on the server.
+  createdByName: z.string().max(40).default(''),
   scoringRules: scoringRulesSchema.default(DEFAULT_SCORING_RULES),
 });
 

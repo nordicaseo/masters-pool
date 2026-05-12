@@ -2,10 +2,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getGameByCode } from '@/lib/games';
 import { golferTotals, participantTotals } from '@/lib/scoring';
-import { getParticipantId } from '@/lib/auth';
-import { db } from '@/db';
-import { participants } from '@/db/schema';
-import { and, eq } from 'drizzle-orm';
+import { getParticipantForGame } from '@/lib/auth';
+import { auth } from '@clerk/nextjs/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,20 +12,21 @@ export default async function GamePage(props: PageProps<'/games/[code]'>) {
   const game = await getGameByCode(code);
   if (!game) notFound();
 
-  const [users, golfers, currentParticipantId] = await Promise.all([
+  const [users, golfers, { userId }] = await Promise.all([
     participantTotals(game.id),
     golferTotals(game.id),
-    getParticipantId(),
+    auth(),
   ]);
 
   let needsToPick = false;
-  if (currentParticipantId) {
-    const [me] = await db
-      .select()
-      .from(participants)
-      .where(and(eq(participants.id, currentParticipantId), eq(participants.gameId, game.id)))
-      .limit(1);
-    if (me && me.picksLocked === 0) needsToPick = true;
+  let needsToJoin = false;
+  if (userId) {
+    const me = await getParticipantForGame(game.id);
+    if (me) {
+      needsToPick = me.picksLocked === 0;
+    } else {
+      needsToJoin = true;
+    }
   }
 
   return (
@@ -35,6 +34,7 @@ export default async function GamePage(props: PageProps<'/games/[code]'>) {
       <GameHeader
         game={game}
         needsToPick={needsToPick}
+        needsToJoin={needsToJoin}
         beerCount={users.reduce(
           (n, u) => n + u.picks.filter((p) => p.missedCut).length,
           0,
@@ -73,10 +73,12 @@ export default async function GamePage(props: PageProps<'/games/[code]'>) {
 function GameHeader({
   game,
   needsToPick,
+  needsToJoin,
   beerCount,
 }: {
   game: { code: string; name: string; tournamentName: string; status: string };
   needsToPick: boolean;
+  needsToJoin: boolean;
   beerCount: number;
 }) {
   return (
@@ -113,6 +115,13 @@ function GameHeader({
               className="inline-flex h-11 items-center gap-2 rounded-full bg-white px-5 font-semibold text-fairway-deep transition hover:bg-fairway-light"
             >
               Pick your golfers →
+            </Link>
+          ) : needsToJoin ? (
+            <Link
+              href={`/games/${game.code}/join`}
+              className="inline-flex h-11 items-center gap-2 rounded-full bg-white px-5 font-semibold text-fairway-deep transition hover:bg-fairway-light"
+            >
+              Join this pool →
             </Link>
           ) : null}
         </div>

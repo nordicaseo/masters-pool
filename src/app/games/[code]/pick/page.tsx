@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { and, eq } from 'drizzle-orm';
+import { auth } from '@clerk/nextjs/server';
+import { eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { golfers as golfersTable, participants } from '@/db/schema';
+import { golfers as golfersTable } from '@/db/schema';
 import { getGameByCode } from '@/lib/games';
-import { getParticipantId } from '@/lib/auth';
+import { getParticipantForGame } from '@/lib/auth';
 import { PickForm } from './pick-form';
 
 export const dynamic = 'force-dynamic';
@@ -14,20 +15,15 @@ export default async function PickPage(props: PageProps<'/games/[code]/pick'>) {
   const game = await getGameByCode(code);
   if (!game) notFound();
 
-  const participantId = await getParticipantId();
-  if (!participantId) {
+  const { userId } = await auth();
+  if (!userId) {
     redirect(`/games/${game.code}/join`);
   }
 
-  const [me] = await db
-    .select()
-    .from(participants)
-    .where(and(eq(participants.id, participantId), eq(participants.gameId, game.id)))
-    .limit(1);
+  const me = await getParticipantForGame(game.id);
   if (!me) {
     redirect(`/games/${game.code}/join`);
   }
-
   if (me.picksLocked === 1) {
     redirect(`/games/${game.code}`);
   }

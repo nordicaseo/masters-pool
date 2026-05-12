@@ -59,7 +59,7 @@ export function PickForm({
       const res = await fetch('/api/picks', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ golferIds: Array.from(selected) }),
+        body: JSON.stringify({ golferIds: Array.from(selected), gameCode }),
       });
       const data = await res.json();
       if (!res.ok) {

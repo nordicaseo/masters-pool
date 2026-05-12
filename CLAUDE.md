@@ -80,22 +80,27 @@ When creating a PR with a checklist (e.g. lint, test, build), check off steps th
 - Verifies `Authorization: Bearer $CRON_SECRET`, fetches ESPN, diffs, inserts new events.
 - For every active game in the DB, fetches once. Tournaments share an event id so the ESPN call is cached per-invocation.
 
-### Auth (No Provider)
-- No accounts, no email. A participant joins by entering a display name + 6-char game code. The server creates a `participants` row and sets a signed cookie `mp_user=<participantId>` (HTTP-only, SameSite=Lax, 90-day expiry).
-- Cookie signing uses `AUTH_SECRET` (HMAC-SHA256). See `src/lib/auth.ts`.
-- The game creator gets the same cookie plus is recorded as the game's `created_by` participant.
+### Auth (Clerk)
+- Clerk via the Vercel Marketplace integration. Required env vars: `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` (auto-provisioned on Vercel; copy locally via `vercel env pull` or paste).
+- Root `middleware.ts` wraps every non-static request with `clerkMiddleware()` so `auth()` from `@clerk/nextjs/server` works everywhere. The middleware doesn't auto-protect routes; each page/route handler that needs auth calls `await auth()` and redirects/returns 401 itself.
+- `participants.user_id` is the Clerk user id. New participants always get one; `(game_id, user_id)` is unique so the same user can't double-join a pool. Legacy rows (from before Clerk) have `user_id IS NULL`; they're orphaned but still appear on leaderboards.
+- Helpers in `src/lib/auth.ts`:
+  - `getParticipantForGame(gameId)` — returns the current Clerk user's participant row in this game, or `null`.
+  - `requireUserId()` — returns the Clerk user id or throws.
+- Sign in / sign up is via Clerk's modal components in `src/app/layout.tsx`. Pool views are public; creating, joining, and submitting picks require auth.
 
 ### Frontend
 - React 19 with Next.js 16 App Router. Path alias `@/*` maps to `./src/*`.
 - Tailwind CSS v4. No component library — keep it minimal, hand-rolled HTML + Tailwind. lucide-react icons if/when needed.
 - Custom theme tokens in `src/app/globals.css`: course palette (`fairway`, `fairway-deep`, `fairway-light`, `sand`, `sand-light`, `flag`, `podium`, `podium-soft`, `cream`) and a display font (`font-display` → Fraunces). Raw CSS vars live on `:root`; `@theme inline` maps them to Tailwind utilities so dark-mode overrides via `prefers-color-scheme` still apply.
 - Routes:
-  - `/` — landing: golf-themed hero, join form, and link to create.
-  - `/games/new` — create form. Server-side fetches the PGA season schedule via `fetchSeasonSchedule(year)` and splits it into an "Upcoming & live" section (default) and a collapsible "Past · for testing" section so users can replay a finished tournament. The picker auto-fills the ESPN event id + tournament name; if ESPN is unreachable the form falls back to a manual entry block. Creating a game with an empty field is allowed — `createGameWithField` no longer throws when ESPN hasn't published the tee sheet yet; the cron seeds golfers once they appear.
+  - `/` — landing: hero + a "Your pools" section (when signed in, listing pools the user is a participant in) + join form + create CTA. Signed-out users see the hero and are prompted to sign in.
+  - `/games` — public directory of every pool grouped by status (Live / Upcoming / Finished). Each card shows tournament, participant count, creator name, status pill, and a "You're in" tag when the signed-in user is a participant.
+  - `/games/new` — create form. Server-side fetches the PGA season schedule via `fetchSeasonSchedule(year)` and splits it into an "Upcoming & live" section (default) and a collapsible "Past · for testing" section so users can replay a finished tournament. Display-name field is pre-filled from the Clerk profile (`firstName`/`username`/email-local-part). Requires sign-in; redirects to `/` otherwise. Creating a game with an empty field is allowed — `createGameWithField` no longer throws when ESPN hasn't published the tee sheet yet; the cron seeds golfers once they appear.
   - `/games/[code]` — game home: scorecard-style leaderboards (pool + field) with a "Public pool" badge. Field rows and pick chips link to per-golfer scorecards.
   - `/games/[code]/golfer/[golferId]` — per-golfer scorecard. Server-fetches `fetchCompetitorSummary` from ESPN at request time and renders a 4-round × 18-hole scorecard grid with per-hole strokes colored by event type (birdie green, eagle deeper, bogey orange, triple+ red). Pool-points total comes from the saved `scoring_events` rows. Renders an empty state if ESPN has no rounds yet.
-  - `/games/[code]/join` — display-name picker.
-  - `/games/[code]/pick` — pick N golfers. If the field is empty (tournament too far out), renders a "Field publishes soon" panel instead of the picker.
+  - `/games/[code]/join` — display-name picker, gated on auth. Pre-fills from Clerk profile. If already a participant, redirects to `/pick` or the game home depending on `picksLocked`.
+  - `/games/[code]/pick` — pick N golfers. Requires auth and an existing participant row (redirects to `/join` otherwise). If the field is empty (tournament too far out), renders a "Field publishes soon" panel instead of the picker.
 
 ### Next.js 16 Notes (Important)
 - `params` and `searchParams` in `page.tsx` and `route.ts` files are **promises** — always `await` them.

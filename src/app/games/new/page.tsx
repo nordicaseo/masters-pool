@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { fetchSeasonSchedule, type ScheduledTournament } from '@/lib/espn';
 import { logError } from '@/lib/log';
 import { CreateGameForm } from './create-game-form';
@@ -6,6 +8,16 @@ import { CreateGameForm } from './create-game-form';
 export const dynamic = 'force-dynamic';
 
 export default async function NewGamePage() {
+  const { userId } = await auth();
+  if (!userId) redirect('/');
+
+  const u = await currentUser();
+  const suggestedName =
+    u?.firstName ??
+    u?.username ??
+    u?.emailAddresses?.[0]?.emailAddress?.split('@')[0] ??
+    '';
+
   const year = new Date().getUTCFullYear();
   const tournaments = await fetchSeasonSchedule(year).catch((err) => {
     logError(err, {
@@ -43,7 +55,11 @@ export default async function NewGamePage() {
             Pick the tournament, set the rules, share the code with your group.
           </p>
         </header>
-        <CreateGameForm upcoming={upcoming} past={past} />
+        <CreateGameForm
+          upcoming={upcoming}
+          past={past}
+          suggestedName={suggestedName}
+        />
       </div>
     </main>
   );

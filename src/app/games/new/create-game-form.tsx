@@ -14,9 +14,11 @@ const DATE_FMT = new Intl.DateTimeFormat('en-US', {
 export function CreateGameForm({
   upcoming,
   past,
+  suggestedName,
 }: {
   upcoming: ScheduledTournament[];
   past: ScheduledTournament[];
+  suggestedName?: string;
 }) {
   const router = useRouter();
   const tournaments = useMemo(() => [...upcoming, ...past], [upcoming, past]);
@@ -27,7 +29,7 @@ export function CreateGameForm({
   const [manualEventId, setManualEventId] = useState('');
   const [manualName, setManualName] = useState('');
   const [poolName, setPoolName] = useState('');
-  const [createdByName, setCreatedByName] = useState('');
+  const [createdByName, setCreatedByName] = useState(suggestedName ?? '');
   const [rules, setRules] = useState<ScoringRules>(DEFAULT_SCORING_RULES);
   const [showRules, setShowRules] = useState(false);
   const [submitting, setSubmitting] = useState(false);
