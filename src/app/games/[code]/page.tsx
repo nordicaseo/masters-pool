@@ -20,20 +20,32 @@ export default async function GamePage(props: PageProps<'/games/[code]'>) {
 
   let needsToPick = false;
   let needsToJoin = false;
+  let isCreator = false;
   if (userId) {
+    isCreator = game.createdByUserId === userId;
     const me = await getParticipantForGame(game.id);
     if (me) {
       needsToPick = me.picksLocked === 0;
-    } else {
+    } else if (game.rosterMode !== 'manual') {
       needsToJoin = true;
     }
   }
+  // Snake-draft creators picking on behalf of manual players: always send them
+  // to the pick page until the draft is complete.
+  const draftIsLive =
+    game.draftMode === 'snake' &&
+    game.draftStartedAt !== null &&
+    game.status !== 'post';
+  const creatorHasMoreToPick =
+    isCreator &&
+    draftIsLive &&
+    users.some((u) => u.picks.length < game.scoringRules.picks_per_user);
 
   return (
     <main className="min-h-screen bg-cream dark:bg-zinc-950">
       <GameHeader
         game={game}
-        needsToPick={needsToPick}
+        needsToPick={needsToPick || creatorHasMoreToPick}
         needsToJoin={needsToJoin}
         beerCount={users.reduce(
           (n, u) => n + u.picks.filter((p) => p.missedCut).length,

@@ -2,7 +2,12 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { DEFAULT_SCORING_RULES, type ScoringRules } from '@/db/schema';
+import {
+  DEFAULT_SCORING_RULES,
+  type DraftMode,
+  type RosterMode,
+  type ScoringRules,
+} from '@/db/schema';
 import type { ScheduledTournament } from '@/lib/espn';
 
 const DATE_FMT = new Intl.DateTimeFormat('en-US', {
@@ -32,6 +37,10 @@ export function CreateGameForm({
   const [createdByName, setCreatedByName] = useState(suggestedName ?? '');
   const [rules, setRules] = useState<ScoringRules>(DEFAULT_SCORING_RULES);
   const [showRules, setShowRules] = useState(false);
+  const [rosterMode, setRosterMode] = useState<RosterMode>('open');
+  const [draftMode, setDraftMode] = useState<DraftMode>('free');
+  const [maxPlayers, setMaxPlayers] = useState<number>(4);
+  const [manualPlayerNames, setManualPlayerNames] = useState<string[]>(['', '']);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,6 +79,22 @@ export function CreateGameForm({
       setError('Enter your name');
       return;
     }
+    // Validate roster/draft mode combinations on the client for a snappy
+    // error before round-tripping to the server.
+    const cleanedManualNames = manualPlayerNames.map((n) => n.trim()).filter(Boolean);
+    if (rosterMode === 'manual' && cleanedManualNames.length < 1) {
+      setError('Add at least one other player to the manual roster');
+      return;
+    }
+    if (
+      draftMode === 'snake' &&
+      rosterMode === 'manual' &&
+      cleanedManualNames.length < 1
+    ) {
+      setError('Snake draft needs at least 2 players (you + 1 other)');
+      return;
+    }
+
     setSubmitting(true);
     try {
       const res = await fetch('/api/games', {
@@ -81,6 +106,10 @@ export function CreateGameForm({
           espnEventId: effective.espnEventId,
           tournamentName: effective.tournamentName,
           scoringRules: rules,
+          rosterMode,
+          draftMode,
+          maxPlayers: rosterMode === 'open' && draftMode === 'snake' ? maxPlayers : undefined,
+          manualPlayerNames: rosterMode === 'manual' ? cleanedManualNames : undefined,
         }),
       });
       const data = await res.json();
@@ -185,7 +214,75 @@ export function CreateGameForm({
         </div>
       </Step>
 
-      <Step number={3} title="Scoring">
+      <Step number={3} title="Format">
+        <div className="space-y-5 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+          <div>
+            <SectionLabel>Roster</SectionLabel>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <ModeCard
+                title="Open"
+                description="Anyone with the code can join."
+                selected={rosterMode === 'open'}
+                onSelect={() => setRosterMode('open')}
+              />
+              <ModeCard
+                title="Manual"
+                description="You add the player names. No signup needed."
+                selected={rosterMode === 'manual'}
+                onSelect={() => setRosterMode('manual')}
+              />
+            </div>
+          </div>
+          <div>
+            <SectionLabel>Draft</SectionLabel>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <ModeCard
+                title="Free"
+                description="Pick independently. Duplicates allowed."
+                selected={draftMode === 'free'}
+                onSelect={() => setDraftMode('free')}
+              />
+              <ModeCard
+                title="Snake draft"
+                description="Take turns in random order. No duplicates."
+                selected={draftMode === 'snake'}
+                onSelect={() => setDraftMode('snake')}
+              />
+            </div>
+          </div>
+          {rosterMode === 'open' && draftMode === 'snake' ? (
+            <Field label="How many players?">
+              <input
+                type="number"
+                min={2}
+                max={10}
+                value={maxPlayers}
+                onChange={(e) => setMaxPlayers(Number(e.target.value))}
+                className="h-10 w-32 rounded-lg border border-zinc-200 bg-cream px-3 font-mono outline-none focus:border-fairway dark:border-zinc-700 dark:bg-zinc-950"
+              />
+              <p className="mt-1 text-xs text-zinc-500">
+                Draft starts as soon as the {maxPlayers}th player joins.
+              </p>
+            </Field>
+          ) : null}
+          {rosterMode === 'manual' ? (
+            <div>
+              <SectionLabel>Other players (besides you)</SectionLabel>
+              <ManualNameList
+                names={manualPlayerNames}
+                onChange={setManualPlayerNames}
+              />
+              <p className="mt-2 text-xs text-zinc-500">
+                {draftMode === 'snake'
+                  ? `You and ${manualPlayerNames.filter((n) => n.trim()).length} other${manualPlayerNames.filter((n) => n.trim()).length === 1 ? '' : 's'} — ${1 + manualPlayerNames.filter((n) => n.trim()).length} players total.`
+                  : "You'll pick golfers for each player from the pool page."}
+              </p>
+            </div>
+          ) : null}
+        </div>
+      </Step>
+
+      <Step number={4} title="Scoring">
         <div className="rounded-xl border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-zinc-900">
           <button
             type="button"
@@ -429,5 +526,91 @@ function NumberField({
         className="h-10 w-full rounded-lg border border-zinc-200 bg-cream px-2 text-right font-mono outline-none focus:border-fairway dark:border-zinc-700 dark:bg-zinc-950"
       />
     </label>
+  );
+}
+
+function ModeCard({
+  title,
+  description,
+  selected,
+  onSelect,
+}: {
+  title: string;
+  description: string;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`flex items-start gap-3 rounded-xl border p-3 text-left transition ${
+        selected
+          ? 'border-fairway bg-fairway-light/60 shadow-sm dark:bg-fairway-deep/40'
+          : 'border-zinc-200 bg-cream hover:border-fairway/60 hover:bg-fairway-light/30 dark:border-zinc-700 dark:bg-zinc-950 dark:hover:bg-fairway-deep/20'
+      }`}
+    >
+      <div
+        className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
+          selected ? 'border-fairway bg-fairway text-white' : 'border-zinc-300 dark:border-zinc-600'
+        }`}
+      >
+        {selected ? '✓' : ''}
+      </div>
+      <div>
+        <p className="font-medium">{title}</p>
+        <p className="mt-0.5 text-xs text-zinc-600 dark:text-zinc-400">{description}</p>
+      </div>
+    </button>
+  );
+}
+
+function ManualNameList({
+  names,
+  onChange,
+}: {
+  names: string[];
+  onChange: (next: string[]) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      {names.map((n, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <span className="w-6 text-right font-mono text-xs text-zinc-500">
+            {i + 1}.
+          </span>
+          <input
+            value={n}
+            onChange={(e) => {
+              const copy = [...names];
+              copy[i] = e.target.value;
+              onChange(copy);
+            }}
+            placeholder={`Player ${i + 2}`}
+            maxLength={40}
+            className="h-10 flex-1 rounded-lg border border-zinc-200 bg-cream px-3 outline-none focus:border-fairway dark:border-zinc-700 dark:bg-zinc-950"
+          />
+          {names.length > 1 ? (
+            <button
+              type="button"
+              onClick={() => onChange(names.filter((_, j) => j !== i))}
+              className="text-zinc-400 transition hover:text-flag"
+              aria-label="Remove player"
+            >
+              ×
+            </button>
+          ) : null}
+        </div>
+      ))}
+      {names.length < 9 ? (
+        <button
+          type="button"
+          onClick={() => onChange([...names, ''])}
+          className="text-xs font-semibold text-fairway hover:text-fairway-deep"
+        >
+          + Add another player
+        </button>
+      ) : null}
+    </div>
   );
 }

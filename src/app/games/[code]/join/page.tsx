@@ -14,6 +14,33 @@ export default async function JoinPage(props: PageProps<'/games/[code]/join'>) {
   if (!game) notFound();
 
   const { userId } = await auth();
+
+  // Manual roster pools refuse new joins from outside.
+  if (game.rosterMode === 'manual') {
+    return (
+      <main className="fairway-bg min-h-screen">
+        <div className="mx-auto max-w-md px-6 py-16">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-fairway-deep dark:text-fairway-light">
+            {game.tournamentName}
+          </p>
+          <h1 className="mt-1 font-display text-4xl font-black tracking-tight">
+            {game.name}
+          </h1>
+          <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+            This pool has a manual roster — only the players the creator added
+            can play. You can still watch the leaderboard.
+          </p>
+          <Link
+            href={`/games/${game.code}`}
+            className="mt-6 inline-flex h-11 items-center gap-2 rounded-full bg-fairway px-5 font-semibold text-white shadow-sm transition hover:bg-fairway-deep"
+          >
+            View pool →
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
   if (!userId) {
     return (
       <main className="fairway-bg min-h-screen">
