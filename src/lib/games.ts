@@ -12,6 +12,7 @@ export async function createGameWithField(input: {
   espnEventId: string;
   tournamentName: string;
   createdByName: string;
+  createdByUserId: string;
   scoringRules: ScoringRules;
 }): Promise<{ gameId: number; code: string; creatorParticipantId: number }> {
   // 1. Generate a unique code.
@@ -60,10 +61,14 @@ export async function createGameWithField(input: {
     );
   }
 
-  // 5. Create the creator as the first participant.
+  // 5. Create the creator as the first participant, tied to their Clerk user.
   const [creator] = await db
     .insert(participants)
-    .values({ gameId: game.id, displayName: input.createdByName })
+    .values({
+      gameId: game.id,
+      userId: input.createdByUserId,
+      displayName: input.createdByName,
+    })
     .returning();
 
   return { gameId: game.id, code: game.code, creatorParticipantId: creator.id };
@@ -72,27 +77,48 @@ export async function createGameWithField(input: {
 export async function joinGame(input: {
   code: string;
   displayName: string;
-}): Promise<{ gameId: number; code: string; participantId: number }> {
+  userId: string;
+}): Promise<{ gameId: number; code: string; participantId: number; alreadyJoined: boolean }> {
   const code = normalizeGameCode(input.code);
   const [game] = await db.select().from(games).where(eq(games.code, code)).limit(1);
   if (!game) throw new Error('Game not found');
 
-  // Try to find an existing participant with the same display name in this game.
+  // Already joined? Return their existing participant row.
   const existing = await db
     .select()
     .from(participants)
-    .where(and(eq(participants.gameId, game.id), eq(participants.displayName, input.displayName)))
+    .where(and(eq(participants.gameId, game.id), eq(participants.userId, input.userId)))
     .limit(1);
-
   if (existing.length > 0) {
-    return { gameId: game.id, code: game.code, participantId: existing[0].id };
+    return {
+      gameId: game.id,
+      code: game.code,
+      participantId: existing[0].id,
+      alreadyJoined: true,
+    };
   }
 
-  const [created] = await db
-    .insert(participants)
-    .values({ gameId: game.id, displayName: input.displayName })
-    .returning();
-  return { gameId: game.id, code: game.code, participantId: created.id };
+  // Display-name uniqueness within a pool is enforced by the DB. If two
+  // friends pick the same name they'll get a clear error from the unique
+  // index and can pick a different one.
+  try {
+    const [created] = await db
+      .insert(participants)
+      .values({
+        gameId: game.id,
+        userId: input.userId,
+        displayName: input.displayName,
+      })
+      .returning();
+    return { gameId: game.id, code: game.code, participantId: created.id, alreadyJoined: false };
+  } catch (error) {
+    // unique_violation on (game_id, display_name)
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg.includes('participants_game_name_unique')) {
+      throw new Error(`The name "${input.displayName}" is already taken in this pool`);
+    }
+    throw error;
+  }
 }
 
 export async function submitPicks(input: {

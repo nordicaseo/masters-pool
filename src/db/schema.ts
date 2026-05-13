@@ -76,6 +76,12 @@ export const participants = pgTable(
     gameId: integer('game_id')
       .notNull()
       .references(() => games.id, { onDelete: 'cascade' }),
+    /**
+     * Clerk user id (e.g. `user_2abc...`). Nullable for legacy cookie-based
+     * participants created before auth was introduced. Every new
+     * participant created via the Clerk auth flow gets one.
+     */
+    userId: text('user_id'),
     displayName: text('display_name').notNull(),
     /** True once the user has locked in their picks. */
     picksLocked: integer('picks_locked').notNull().default(0),
@@ -83,7 +89,11 @@ export const participants = pgTable(
   },
   (t) => [
     uniqueIndex('participants_game_name_unique').on(t.gameId, t.displayName),
+    // (game_id, user_id) is unique for non-null user_ids — Postgres treats
+    // NULLs as distinct so legacy rows with null user_id don't collide.
+    uniqueIndex('participants_game_user_unique').on(t.gameId, t.userId),
     index('participants_game_idx').on(t.gameId),
+    index('participants_user_idx').on(t.userId),
   ],
 );
 

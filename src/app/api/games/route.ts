@@ -1,5 +1,5 @@
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { createGameWithField } from '@/lib/games';
-import { setParticipantCookie } from '@/lib/auth';
 import { createGameSchema } from '@/lib/validation';
 import { logError } from '@/lib/log';
 
@@ -7,6 +7,11 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
+  const { userId } = await auth();
+  if (!userId) {
+    return Response.json({ error: 'sign in required' }, { status: 401 });
+  }
+
   let body: unknown;
   try {
     body = await request.json();
@@ -20,14 +25,24 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { gameId, code, creatorParticipantId } = await createGameWithField(parsed.data);
-    await setParticipantCookie(creatorParticipantId);
+    // Fall back to the Clerk profile name if the form didn't supply one.
+    let createdByName = parsed.data.createdByName.trim();
+    if (!createdByName) {
+      const u = await currentUser();
+      createdByName =
+        u?.firstName ?? u?.username ?? u?.emailAddresses?.[0]?.emailAddress?.split('@')[0] ?? 'Player';
+    }
+    const { gameId, code } = await createGameWithField({
+      ...parsed.data,
+      createdByName,
+      createdByUserId: userId,
+    });
     return Response.json({ gameId, code });
   } catch (error) {
     logError(error, {
       subsystem: 'api',
       operation: 'create_game',
-      extra: { espnEventId: parsed.data.espnEventId },
+      extra: { userId, espnEventId: parsed.data.espnEventId },
     });
     return Response.json(
       { error: error instanceof Error ? error.message : 'failed to create game' },
