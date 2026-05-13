@@ -49,6 +49,25 @@ export const DEFAULT_SCORING_RULES: ScoringRules = {
   tie_handling: 'split_floor',
 };
 
+/**
+ * How players are added to a pool:
+ *   - `open`   — anyone with the code can sign up and join (default)
+ *   - `manual` — the creator enters the player names upfront; no one
+ *                else can join with the code. Manual participants have
+ *                `user_id = NULL` and are picked-for by the creator.
+ */
+export type RosterMode = 'open' | 'manual';
+
+/**
+ * How picks are made:
+ *   - `free`  — each participant picks K golfers independently;
+ *               duplicate picks across participants are allowed (default).
+ *   - `snake` — turn-based with a randomized order. Each round reverses:
+ *               1→2→…→N, N→…→2→1, 1→…→N, …
+ *               No two participants can pick the same golfer.
+ */
+export type DraftMode = 'free' | 'snake';
+
 export const games = pgTable(
   'games',
   {
@@ -64,6 +83,24 @@ export const games = pgTable(
     /** Tournament status as of the last cron tick: pre, in, post. */
     status: text('status').notNull().default('pre'),
     createdByName: text('created_by_name').notNull(),
+    /** Clerk user id of the creator. Nullable for legacy rows. */
+    createdByUserId: text('created_by_user_id'),
+    /** open | manual — see {@link RosterMode}. */
+    rosterMode: text('roster_mode').$type<RosterMode>().notNull().default('open'),
+    /** free | snake — see {@link DraftMode}. */
+    draftMode: text('draft_mode').$type<DraftMode>().notNull().default('free'),
+    /**
+     * Required when `draft_mode = 'snake'`. The number of players the pool
+     * waits for before randomizing the snake order and starting the draft.
+     * Null for free-mode pools (no cap).
+     */
+    maxPlayers: integer('max_players'),
+    /**
+     * Set once the snake draft has been seeded. While null, the pool is
+     * still gathering players (Open+Snake) or hasn't started the draft yet.
+     * Used as a cheap "is the draft live?" flag for the UI.
+     */
+    draftStartedAt: timestamp('draft_started_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex('games_code_unique').on(t.code)],
@@ -83,6 +120,16 @@ export const participants = pgTable(
      */
     userId: text('user_id'),
     displayName: text('display_name').notNull(),
+    /**
+     * Snake-draft turn order (1..N). Null in free-mode pools and in
+     * snake-mode pools that haven't started the draft yet (i.e., still
+     * waiting for the roster to fill). Once set, the snake walk is:
+     *   round 1: order [1, 2, ..., N]
+     *   round 2: order [N, ..., 2, 1]
+     *   round 3: order [1, 2, ..., N]
+     *   ...
+     */
+    pickOrder: integer('pick_order'),
     /** True once the user has locked in their picks. */
     picksLocked: integer('picks_locked').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

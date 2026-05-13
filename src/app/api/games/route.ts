@@ -32,8 +32,13 @@ export async function POST(request: Request) {
       createdByName =
         u?.firstName ?? u?.username ?? u?.emailAddresses?.[0]?.emailAddress?.split('@')[0] ?? 'Player';
     }
+    // Strip empty/whitespace names from the manual roster.
+    const manualPlayerNames = parsed.data.manualPlayerNames
+      ?.map((n) => n.trim())
+      .filter(Boolean);
     const { gameId, code } = await createGameWithField({
       ...parsed.data,
+      manualPlayerNames,
       createdByName,
       createdByUserId: userId,
     });

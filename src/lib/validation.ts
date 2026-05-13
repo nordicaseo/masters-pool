@@ -17,14 +17,38 @@ export const scoringRulesSchema = z.object({
   tie_handling: z.enum(['split_floor', 'full']),
 });
 
-export const createGameSchema = z.object({
-  name: z.string().min(1).max(80),
-  espnEventId: z.string().min(1).max(40),
-  tournamentName: z.string().min(1).max(120),
-  // Optional — falls back to the Clerk profile name on the server.
-  createdByName: z.string().max(40).default(''),
-  scoringRules: scoringRulesSchema.default(DEFAULT_SCORING_RULES),
-});
+export const createGameSchema = z
+  .object({
+    name: z.string().min(1).max(80),
+    espnEventId: z.string().min(1).max(40),
+    tournamentName: z.string().min(1).max(120),
+    // Optional — falls back to the Clerk profile name on the server.
+    createdByName: z.string().max(40).default(''),
+    scoringRules: scoringRulesSchema.default(DEFAULT_SCORING_RULES),
+    rosterMode: z.enum(['open', 'manual']).default('open'),
+    draftMode: z.enum(['free', 'snake']).default('free'),
+    maxPlayers: z.number().int().min(2).max(10).optional(),
+    /** Display names of the manual roster, when rosterMode === 'manual'. */
+    manualPlayerNames: z.array(z.string().min(1).max(40)).max(10).optional(),
+  })
+  .refine(
+    (v) =>
+      v.draftMode !== 'snake' ||
+      (v.rosterMode === 'open' && typeof v.maxPlayers === 'number') ||
+      (v.rosterMode === 'manual' &&
+        Array.isArray(v.manualPlayerNames) &&
+        v.manualPlayerNames.length >= 2),
+    {
+      message:
+        'Snake draft needs a player count (open) or at least 2 manual player names (manual)',
+    },
+  )
+  .refine(
+    (v) =>
+      v.rosterMode !== 'manual' ||
+      (Array.isArray(v.manualPlayerNames) && v.manualPlayerNames.length >= 1),
+    { message: 'Manual rosters need at least 1 player name' },
+  );
 
 export const joinGameSchema = z.object({
   code: z.string().min(4).max(10),

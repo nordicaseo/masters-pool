@@ -59,8 +59,8 @@ When creating a PR with a checklist (e.g. lint, test, build), check off steps th
 - All monetary/score values stored as integers. Points are plain `integer` (can be negative for bogeys).
 
 ### Domain Model
-- **`games`** — one row per pool. Holds the tournament identifier (`espn_event_id`), creator display name, the 6-char join code, and a `scoring_rules` JSONB blob (point values for each result type + finish bonuses + cut handling). Each game is self-contained.
-- **`participants`** — pool members. Identified by display name + game. No email/password. Cookie `mp_user` stores the participant id once they join.
+- **`games`** — one row per pool. Holds the tournament identifier (`espn_event_id`), creator name + Clerk user id (`created_by_user_id`), the 6-char join code, and a `scoring_rules` JSONB blob (point values for each result type + finish bonuses + cut handling). Two mode fields control the game format: `roster_mode` (`open` | `manual`) and `draft_mode` (`free` | `snake`). Snake-mode pools also have `max_players` and `draft_started_at`. Each game is self-contained.
+- **`participants`** — pool members. One row per player per pool. `user_id` holds the Clerk user id (nullable: NULL means a manually-added player, owned by `games.created_by_user_id`). `pick_order` (1..N) is set when a snake draft starts; null otherwise. Display name is unique within a pool.
 - **`golfers`** — the field for a given game. Seeded once when the game is created by hitting ESPN. `(game_id, espn_athlete_id)` is unique.
 - **`picks`** — `(participant_id, golfer_id)`. Exactly 3 per participant. Locked on submit.
 - **`scoring_events`** — append-only event log. `(game_id, golfer_id, kind, round, hole)` is unique so cron re-runs are idempotent. `kind` is one of `birdie | eagle | albatross | hole_in_one | bogey | double_bogey | triple_plus | finish_1 | finish_2 | finish_3 | missed_cut`. `points` is denormalized at insert time using the game's scoring rules so changing rules later does not retroactively rewrite history.
@@ -70,6 +70,20 @@ When creating a PR with a checklist (e.g. lint, test, build), check off steps th
 - During live rounds, ESPN exposes per-hole shot data under each competitor's `linescores` per round. We diff against existing `scoring_events` rows by `(round, hole)` and only insert the new ones.
 - Final position bonuses are awarded once the tournament status flips to "post" / "final" and the leaderboard is sorted. Ties: tied golfers share the bonus pool evenly, rounded down.
 - Missed cut: detected via competitor status `cut`. Inserts a single `missed_cut` event with `points: 0` so the UI can render the 🍺 badge.
+
+### Game Modes (`src/lib/games.ts` + `src/lib/draft.ts`)
+Two independent toggles on each pool. All 4 combinations are supported.
+
+- **Roster** — `open` (anyone joins with the 6-char code) or `manual` (creator enters all player names upfront; the only joiner is the creator themselves; everyone else is a `user_id IS NULL` row owned by the creator).
+- **Draft** — `free` (every participant picks K golfers independently via `POST /api/picks` with a `golferIds` array; duplicates across participants allowed) or `snake` (one golfer at a time; turn-based; no duplicates across the pool).
+
+When `draft_mode === 'snake'`:
+- `max_players` is required (auto-set for manual rosters from name count; user-set for open rosters).
+- `tryStartSnakeDraft(gameId, maxPlayers)` runs after every join and when the roster fills — randomizes `pick_order` 1..N via `shuffleWithSeed`, sets `draft_started_at`. Idempotent.
+- `pickOneGolfer({ participantId, golferId })` enforces: draft has started, the caller's `pick_order` matches `nextSlot(allPicks.length, n, k)`, the golfer is in the field and not already picked. Locks the participant once they've picked all K.
+- `snakeDraftOrder(n, k)` returns the player slot for each overall pick (`[1, 2, 2, 1, 1, 2]` for 2×3). Tested in `src/test/draft.test.ts`.
+
+For Manual+Snake the **creator** picks for the current slot's player on every turn — `loadActableParticipant()` allows the creator to act for any `user_id IS NULL` participant in their pool. The pick UI shows "Pick for <name>" instead of "Your turn".
 
 ### Scoring Engine (`src/lib/scoring.ts`)
 - `pointsForKind(rules, kind)` resolves a point value from the game's `scoring_rules` JSON.
