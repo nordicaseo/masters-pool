@@ -9,6 +9,8 @@ type FieldGolfer = {
   country: string | null;
   position: string | null;
   scoreToPar: number | null;
+  /** Display name of the participant who picked this golfer, or null if available. */
+  pickedBy: string | null;
 };
 
 type Participant = {
@@ -116,34 +118,54 @@ export function SnakeDraftBoard({
               className="h-11 flex-1 rounded-lg border border-zinc-200 bg-cream px-3 outline-none focus:border-fairway focus:ring-2 focus:ring-fairway/30 dark:border-zinc-700 dark:bg-zinc-950"
             />
             <span className="font-mono text-xs uppercase tracking-wider text-zinc-500">
-              {filtered.length} left
+              {filtered.filter((g) => !g.pickedBy).length} available
             </span>
           </div>
           {error ? <p className="text-sm font-medium text-flag">{error}</p> : null}
           <ul className="max-h-[60vh] divide-y divide-zinc-100 overflow-y-auto rounded-xl border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
-            {filtered.map((g) => (
-              <li key={g.id}>
-                <button
-                  type="button"
-                  disabled={submitting}
-                  onClick={() => handlePick(g.id)}
-                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-fairway-light/40 disabled:opacity-50 dark:hover:bg-fairway-deep/30"
+            {filtered.map((g) =>
+              g.pickedBy ? (
+                <li
+                  key={g.id}
+                  className="flex w-full items-center gap-3 bg-zinc-50/60 px-4 py-2.5 opacity-60 dark:bg-zinc-900/40"
                 >
-                  <span className="w-12 font-mono text-xs font-semibold text-zinc-500">
+                  <span className="w-12 font-mono text-xs font-semibold text-zinc-400">
                     {g.position ?? '—'}
                   </span>
-                  <span className="flex-1 truncate font-medium">{g.name}</span>
-                  {g.country ? (
-                    <span className="hidden text-xs text-zinc-500 sm:inline">
-                      {g.country}
-                    </span>
-                  ) : null}
+                  <span className="flex-1 truncate font-medium text-zinc-500 line-through dark:text-zinc-500">
+                    {g.name}
+                  </span>
+                  <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                    Picked · {g.pickedBy}
+                  </span>
                   <span className="w-12 text-right">
                     <ScoreToPar value={g.scoreToPar} />
                   </span>
-                </button>
-              </li>
-            ))}
+                </li>
+              ) : (
+                <li key={g.id}>
+                  <button
+                    type="button"
+                    disabled={submitting}
+                    onClick={() => handlePick(g.id)}
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-fairway-light/40 disabled:opacity-50 dark:hover:bg-fairway-deep/30"
+                  >
+                    <span className="w-12 font-mono text-xs font-semibold text-zinc-500">
+                      {g.position ?? '—'}
+                    </span>
+                    <span className="flex-1 truncate font-medium">{g.name}</span>
+                    {g.country ? (
+                      <span className="hidden text-xs text-zinc-500 sm:inline">
+                        {g.country}
+                      </span>
+                    ) : null}
+                    <span className="w-12 text-right">
+                      <ScoreToPar value={g.scoreToPar} />
+                    </span>
+                  </button>
+                </li>
+              ),
+            )}
           </ul>
         </div>
       ) : (
