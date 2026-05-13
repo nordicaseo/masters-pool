@@ -67,7 +67,9 @@ export default async function PickPage(props: PageProps<'/games/[code]/pick'>) {
     .innerJoin(golfersTable, eq(picks.golferId, golfersTable.id))
     .where(eq(participants.gameId, game.id));
 
-  // Field — only the unpicked golfers are selectable.
+  // Field — every golfer is rendered. Picked golfers are shown disabled with
+  // a "Picked by X" tag so the next drafter knows who's already taken instead
+  // of wondering why their search came up empty.
   const fieldRows = await db
     .select({
       id: golfersTable.id,
@@ -78,9 +80,20 @@ export default async function PickPage(props: PageProps<'/games/[code]/pick'>) {
     })
     .from(golfersTable)
     .where(eq(golfersTable.gameId, game.id));
-  const pickedGolferIds = new Set(allPicks.map((p) => p.golferId));
-  const remainingField = fieldRows
-    .filter((g) => !pickedGolferIds.has(g.id))
+  const pickedByName = new Map<number, string>();
+  for (const p of allPicks) {
+    const picker = allParts.find((pp) => pp.id === p.participantId);
+    if (picker) pickedByName.set(p.golferId, picker.displayName);
+  }
+  const annotatedField = fieldRows
+    .map((g) => ({
+      id: g.id,
+      name: g.name,
+      country: g.country,
+      position: g.position,
+      scoreToPar: g.scoreToPar,
+      pickedBy: pickedByName.get(g.id) ?? null,
+    }))
     .sort((a, b) => {
       const ap = a.scoreToPar ?? 999;
       const bp = b.scoreToPar ?? 999;
@@ -160,7 +173,7 @@ export default async function PickPage(props: PageProps<'/games/[code]/pick'>) {
           isManual: p.userId === null,
           picks: picksByParticipant.get(p.id) ?? [],
         }))}
-        field={remainingField}
+        field={annotatedField}
         picksPerUser={k}
       />
     </Shell>
