@@ -30,6 +30,8 @@ export const createGameSchema = z
     maxPlayers: z.number().int().min(2).max(10).optional(),
     /** Display names of the manual roster, when rosterMode === 'manual'. */
     manualPlayerNames: z.array(z.string().min(1).max(40)).max(10).optional(),
+    /** Free-text stakes — what the group is playing for. */
+    stakes: z.string().max(200).optional(),
   })
   .refine(
     (v) =>

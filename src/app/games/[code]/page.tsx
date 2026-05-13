@@ -98,7 +98,13 @@ function GameHeader({
   needsToJoin,
   beerCount,
 }: {
-  game: { code: string; name: string; tournamentName: string; status: string };
+  game: {
+    code: string;
+    name: string;
+    tournamentName: string;
+    status: string;
+    stakes: string | null;
+  };
   needsToPick: boolean;
   needsToJoin: boolean;
   beerCount: number;
@@ -114,6 +120,14 @@ function GameHeader({
             <h1 className="mt-1 font-display text-4xl font-black tracking-tight">
               {game.name}
             </h1>
+            {game.stakes ? (
+              <p className="mt-2 text-sm text-fairway-light/90">
+                <span className="font-semibold uppercase tracking-wider text-fairway-light/70">
+                  Playing for:
+                </span>{' '}
+                <span className="font-medium text-white">{game.stakes}</span>
+              </p>
+            ) : null}
             <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-fairway-light/90">
               <span>
                 Join code{' '}
