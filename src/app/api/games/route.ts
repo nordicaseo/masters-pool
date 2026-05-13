@@ -41,6 +41,7 @@ export async function POST(request: Request) {
       manualPlayerNames,
       createdByName,
       createdByUserId: userId,
+      stakes: parsed.data.stakes,
     });
     return Response.json({ gameId, code });
   } catch (error) {

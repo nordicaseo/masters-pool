@@ -35,6 +35,7 @@ export function CreateGameForm({
   const [manualName, setManualName] = useState('');
   const [poolName, setPoolName] = useState('');
   const [createdByName, setCreatedByName] = useState(suggestedName ?? '');
+  const [stakes, setStakes] = useState('');
   const [rules, setRules] = useState<ScoringRules>(DEFAULT_SCORING_RULES);
   const [showRules, setShowRules] = useState(false);
   const [rosterMode, setRosterMode] = useState<RosterMode>('open');
@@ -110,6 +111,7 @@ export function CreateGameForm({
           draftMode,
           maxPlayers: rosterMode === 'open' && draftMode === 'snake' ? maxPlayers : undefined,
           manualPlayerNames: rosterMode === 'manual' ? cleanedManualNames : undefined,
+          stakes: stakes.trim() || undefined,
         }),
       });
       const data = await res.json();
@@ -191,25 +193,39 @@ export function CreateGameForm({
       </Step>
 
       <Step number={2} title="Name your pool">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Pool name">
+        <div className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Pool name">
+              <input
+                value={poolName}
+                onChange={(e) => setPoolName(e.target.value)}
+                placeholder={suggestedPoolName || 'My pool'}
+                maxLength={80}
+                className="h-11 w-full rounded-lg border border-zinc-200 bg-cream px-3 outline-none transition focus:border-fairway focus:ring-2 focus:ring-fairway/30 dark:border-zinc-700 dark:bg-zinc-950"
+              />
+            </Field>
+            <Field label="Your name">
+              <input
+                value={createdByName}
+                onChange={(e) => setCreatedByName(e.target.value)}
+                placeholder="Who's running this?"
+                maxLength={40}
+                required
+                className="h-11 w-full rounded-lg border border-zinc-200 bg-cream px-3 outline-none transition focus:border-fairway focus:ring-2 focus:ring-fairway/30 dark:border-zinc-700 dark:bg-zinc-950"
+              />
+            </Field>
+          </div>
+          <Field label="Stakes (optional)">
             <input
-              value={poolName}
-              onChange={(e) => setPoolName(e.target.value)}
-              placeholder={suggestedPoolName || 'My pool'}
-              maxLength={80}
+              value={stakes}
+              onChange={(e) => setStakes(e.target.value)}
+              placeholder="a beer, hot dogs, hot soup"
+              maxLength={200}
               className="h-11 w-full rounded-lg border border-zinc-200 bg-cream px-3 outline-none transition focus:border-fairway focus:ring-2 focus:ring-fairway/30 dark:border-zinc-700 dark:bg-zinc-950"
             />
-          </Field>
-          <Field label="Your name">
-            <input
-              value={createdByName}
-              onChange={(e) => setCreatedByName(e.target.value)}
-              placeholder="Who's running this?"
-              maxLength={40}
-              required
-              className="h-11 w-full rounded-lg border border-zinc-200 bg-cream px-3 outline-none transition focus:border-fairway focus:ring-2 focus:ring-fairway/30 dark:border-zinc-700 dark:bg-zinc-950"
-            />
+            <p className="mt-1 text-xs text-zinc-500">
+              What is the group playing for? Shown on the pool page.
+            </p>
           </Field>
         </div>
       </Step>

@@ -80,6 +80,9 @@ export const games = pgTable(
     tournamentName: text('tournament_name').notNull(),
     /** Per-game scoring rules. Snapshot at creation time. */
     scoringRules: jsonb('scoring_rules').$type<ScoringRules>().notNull(),
+    /** What the group is playing for — free-text, e.g. "a beer, hot dogs,
+     *  hot soup". Nullable since older pools predate this field. */
+    stakes: text('stakes'),
     /** Tournament status as of the last cron tick: pre, in, post. */
     status: text('status').notNull().default('pre'),
     createdByName: text('created_by_name').notNull(),

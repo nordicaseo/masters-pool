@@ -29,6 +29,8 @@ export async function createGameWithField(input: {
   /** Names of manual participants, when rosterMode === 'manual'. The
    *  creator is added separately as participant 1; these are players 2..N. */
   manualPlayerNames?: string[];
+  /** Free-text stakes, e.g. "a beer, hot dogs, hot soup". */
+  stakes?: string;
 }): Promise<{ gameId: number; code: string; creatorParticipantId: number }> {
   // 1. Generate a unique code.
   let code = generateGameCode();
@@ -60,6 +62,7 @@ export async function createGameWithField(input: {
   const { field } = parseField(lb);
 
   // 4. Create the game row.
+  const trimmedStakes = input.stakes?.trim();
   const [game] = await db
     .insert(games)
     .values({
@@ -68,6 +71,7 @@ export async function createGameWithField(input: {
       espnEventId: input.espnEventId,
       tournamentName: input.tournamentName,
       scoringRules: input.scoringRules,
+      stakes: trimmedStakes ? trimmedStakes : null,
       createdByName: input.createdByName,
       createdByUserId: input.createdByUserId,
       rosterMode: input.rosterMode,
