@@ -4,6 +4,7 @@ import { getGameByCode } from '@/lib/games';
 import { golferTotals, participantTotals } from '@/lib/scoring';
 import { getParticipantForGame } from '@/lib/auth';
 import { auth } from '@clerk/nextjs/server';
+import { DeletePoolButton } from './delete-pool-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -77,6 +78,15 @@ export default async function GamePage(props: PageProps<'/games/[code]'>) {
             <FieldScorecard gameCode={game.code} golfers={golfers} />
           )}
         </section>
+
+        {isCreator ? (
+          <section className="mt-12 border-t border-zinc-200 pt-6 dark:border-zinc-800">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.15em] text-zinc-500">
+              Creator tools
+            </p>
+            <DeletePoolButton gameCode={game.code} gameName={game.name} />
+          </section>
+        ) : null}
       </div>
     </main>
   );

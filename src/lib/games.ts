@@ -396,6 +396,27 @@ export async function getGameByCode(code: string) {
 }
 
 /**
+ * Hard-delete a pool. Only the creator can do this. Schema FKs have
+ * `onDelete: 'cascade'` on every child table (participants, golfers, picks,
+ * scoring_events) so the database wipes the children for us.
+ */
+export async function deleteGame(input: {
+  gameId: number;
+  callerUserId: string;
+}): Promise<void> {
+  const [game] = await db
+    .select()
+    .from(games)
+    .where(eq(games.id, input.gameId))
+    .limit(1);
+  if (!game) throw new Error('Game not found');
+  if (game.createdByUserId !== input.callerUserId) {
+    throw new Error('Only the pool creator can delete this pool');
+  }
+  await db.delete(games).where(eq(games.id, input.gameId));
+}
+
+/**
  * Look up a participant by id and confirm the caller is allowed to act on
  * their behalf. Allowed if:
  *   - the participant's `user_id` matches the caller (picking for self), OR
