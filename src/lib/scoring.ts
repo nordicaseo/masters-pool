@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import {
   games,
@@ -372,8 +372,49 @@ export type GolferTotal = {
   points: number;
 };
 
+/**
+ * Stroke-to-par delta contributed by each scoring event kind. Used to
+ * derive a live score-to-par from the per-hole event log rather than
+ * trusting ESPN's aggregate `score.displayValue`, which can lag the
+ * per-hole feed by 5–30 minutes during a live round.
+ *
+ * Approximations:
+ *  - `hole_in_one` assumes a par-3 ace (-2). Aces on par-4 or par-5 are
+ *    vanishingly rare and would be modestly under-counted here.
+ *  - `triple_plus` is a bucket for "triple bogey or worse"; we use +3 as
+ *    the most common value. Anything worse will be slightly under-counted
+ *    relative to the player's true to-par.
+ *  - Round-0 events (finish bonuses, missed_cut) don't affect to-par.
+ */
+export const STROKE_DELTA: Record<ScoringEventKind, number> = {
+  birdie: -1,
+  eagle: -2,
+  albatross: -3,
+  hole_in_one: -2,
+  bogey: 1,
+  double_bogey: 2,
+  triple_plus: 3,
+  finish_1: 0,
+  finish_2: 0,
+  finish_3: 0,
+  missed_cut: 0,
+};
+
+/**
+ * Sum stroke deltas across a golfer's per-hole events. Returns null
+ * when there are no per-hole events (so callers can fall back to the
+ * ESPN aggregate).
+ */
+export function deriveScoreToPar(
+  events: ReadonlyArray<{ kind: ScoringEventKind; round: number }>,
+): number | null {
+  const perHole = events.filter((e) => e.round >= 1);
+  if (perHole.length === 0) return null;
+  return perHole.reduce((sum, e) => sum + STROKE_DELTA[e.kind], 0);
+}
+
 export async function golferTotals(gameId: number): Promise<GolferTotal[]> {
-  const rows = await db
+  const field = await db
     .select({
       golferId: golfers.id,
       espnAthleteId: golfers.espnAthleteId,
@@ -382,15 +423,54 @@ export async function golferTotals(gameId: number): Promise<GolferTotal[]> {
       position: golfers.position,
       scoreToPar: golfers.scoreToPar,
       missedCut: golfers.missedCut,
-      points: sql<number>`COALESCE(SUM(${scoringEvents.points}), 0)::int`,
     })
     .from(golfers)
-    .leftJoin(scoringEvents, eq(scoringEvents.golferId, golfers.id))
-    .where(eq(golfers.gameId, gameId))
-    .groupBy(golfers.id);
+    .where(eq(golfers.gameId, gameId));
 
-  return rows
-    .map((r) => ({ ...r, missedCut: r.missedCut === 1 }))
+  // Pull every scoring event for this game in one query and group by
+  // golfer in JS. The data set is small (max ~150 golfers × ~72 holes =
+  // a few thousand rows) and this keeps two derived numbers — total
+  // points AND live score-to-par — in one pass without a tortured SQL
+  // CASE expression.
+  const events = await db
+    .select({
+      golferId: scoringEvents.golferId,
+      kind: scoringEvents.kind,
+      round: scoringEvents.round,
+      points: scoringEvents.points,
+    })
+    .from(scoringEvents)
+    .where(eq(scoringEvents.gameId, gameId));
+
+  const eventsByGolfer = new Map<number, typeof events>();
+  for (const e of events) {
+    const arr = eventsByGolfer.get(e.golferId) ?? [];
+    arr.push(e);
+    eventsByGolfer.set(e.golferId, arr);
+  }
+
+  return field
+    .map((g) => {
+      const golferEvents = eventsByGolfer.get(g.golferId) ?? [];
+      const points = golferEvents.reduce((s, e) => s + e.points, 0);
+      const derived = deriveScoreToPar(golferEvents);
+      return {
+        golferId: g.golferId,
+        espnAthleteId: g.espnAthleteId,
+        name: g.name,
+        country: g.country,
+        position: g.position,
+        // Prefer our own derivation when we have any per-hole events
+        // synced for this golfer (i.e. they were picked, so we hit
+        // ESPN's competitor-summary endpoint for them). It's strictly
+        // more up-to-date than ESPN's aggregate displayValue during a
+        // live round. Falls back to the aggregate for golfers we don't
+        // sync per-hole.
+        scoreToPar: derived !== null ? derived : g.scoreToPar,
+        missedCut: g.missedCut === 1,
+        points,
+      };
+    })
     .sort((a, b) => b.points - a.points);
 }
 
