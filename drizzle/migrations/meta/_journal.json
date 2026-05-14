@@ -43,6 +43,13 @@
       "when": 1779400000000,
       "tag": "0005_stake_items",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779600000000,
+      "tag": "0006_emergency_swaps",
+      "breakpoints": true
     }
   ]
 }

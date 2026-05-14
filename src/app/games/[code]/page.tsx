@@ -13,7 +13,12 @@ import {
   getPendingProposal,
   getRecentResolvedProposals,
 } from '@/lib/rule-changes';
+import {
+  getPendingSwap,
+  getRecentResolvedSwaps,
+} from '@/lib/emergency-swaps';
 import { RuleProposalBanner } from './rule-proposal-banner';
+import { EmergencySwapBanner } from './emergency-swap-banner';
 
 export const dynamic = 'force-dynamic';
 
@@ -85,12 +90,17 @@ export default async function GamePage(props: PageProps<'/games/[code]'>) {
     }
   }
 
-  // Rule-change proposals: the open one (if any) gets a prominent banner;
-  // resolved ones show in a small audit history below the House rules.
-  const [pendingProposal, resolvedProposals] = await Promise.all([
-    getPendingProposal(game.id),
-    getRecentResolvedProposals(game.id, 5),
-  ]);
+  // Rule-change proposals + emergency swap proposals — fetched together
+  // so the page renders in a single round-trip's worth of waiting. The
+  // pending ones get prominent banners; resolved ones appear in small
+  // audit-history sections below the House rules card.
+  const [pendingProposal, resolvedProposals, pendingSwap, resolvedSwaps] =
+    await Promise.all([
+      getPendingProposal(game.id),
+      getRecentResolvedProposals(game.id, 5),
+      getPendingSwap(game.id),
+      getRecentResolvedSwaps(game.id, 5),
+    ]);
   const pendingDiff = pendingProposal
     ? diffScoringRules(pendingProposal.beforeRules, pendingProposal.afterRules)
     : [];
@@ -103,6 +113,17 @@ export default async function GamePage(props: PageProps<'/games/[code]'>) {
       ? pendingProposal.voters.some(
           (v) => v.participantId === myParticipantId,
         )
+      : false;
+
+  // Mirror logic for the emergency-swap banner.
+  const swapCallerVote =
+    pendingSwap && myParticipantId !== null
+      ? pendingSwap.voters.find((v) => v.participantId === myParticipantId)
+          ?.vote ?? null
+      : null;
+  const swapCallerIsEligible =
+    pendingSwap && myParticipantId !== null
+      ? pendingSwap.voters.some((v) => v.participantId === myParticipantId)
       : false;
 
   return (
@@ -120,6 +141,26 @@ export default async function GamePage(props: PageProps<'/games/[code]'>) {
       <div className="mx-auto max-w-4xl px-6 py-8">
         {subWindow && myParticipantId !== null ? (
           <SubstitutionBanner gameCode={game.code} window={subWindow} />
+        ) : null}
+
+        {pendingSwap ? (
+          <EmergencySwapBanner
+            gameCode={game.code}
+            proposalId={pendingSwap.id}
+            participantDisplayName={pendingSwap.participantDisplayName}
+            droppedGolferName={pendingSwap.droppedGolferName}
+            newGolferName={pendingSwap.newGolferName}
+            isProposer={userId === pendingSwap.proposedByUserId}
+            callerCanVote={swapCallerIsEligible && swapCallerVote === null}
+            callerHasVoted={swapCallerVote !== null}
+            voters={pendingSwap.voters.map((v) => ({
+              participantId: v.participantId,
+              displayName: v.displayName,
+              vote: v.vote,
+            }))}
+            approveCount={pendingSwap.tally.approveCount}
+            eligibleCount={pendingSwap.tally.eligibleCount}
+          />
         ) : null}
 
         {pendingProposal ? (
@@ -156,6 +197,10 @@ export default async function GamePage(props: PageProps<'/games/[code]'>) {
           <ResolvedProposalsList proposals={resolvedProposals} />
         ) : null}
 
+        {resolvedSwaps.length > 0 ? (
+          <ResolvedSwapsList swaps={resolvedSwaps} />
+        ) : null}
+
         <section className="mb-10">
           <SectionHeader title="Pool leaderboard" subtitle={`${users.length} player${users.length === 1 ? '' : 's'}`} />
           {users.length === 0 ? (
@@ -176,6 +221,20 @@ export default async function GamePage(props: PageProps<'/games/[code]'>) {
               ))}
             </ol>
           )}
+          {myParticipantId !== null &&
+          !needsToPick &&
+          !pendingSwap &&
+          game.status !== 'post' ? (
+            <p className="mt-3 text-center text-xs text-zinc-500">
+              Picked the wrong golfer by mistake?{' '}
+              <Link
+                href={`/games/${game.code}/emergency-swap`}
+                className="font-semibold text-flag underline-offset-2 hover:underline"
+              >
+                Request an emergency swap →
+              </Link>
+            </p>
+          ) : null}
         </section>
 
         <section>
@@ -289,6 +348,75 @@ function ResolvedProposalsList({
                     </span>
                   ))
                 )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </details>
+  );
+}
+
+function ResolvedSwapsList({
+  swaps,
+}: {
+  swaps: Array<{
+    id: number;
+    status: 'approved' | 'rejected' | 'cancelled' | 'pending';
+    proposedByUserId: string;
+    proposedAt: Date;
+    resolvedAt: Date | null;
+    participantDisplayName: string;
+    droppedGolferName: string;
+    newGolferName: string;
+  }>;
+}) {
+  return (
+    <details className="mb-8 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <summary className="cursor-pointer select-none text-[10px] font-bold uppercase tracking-[0.15em] text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300">
+        Emergency swap history · {swaps.length}
+      </summary>
+      <ul className="mt-3 space-y-2">
+        {swaps.map((s) => {
+          const statusLabel =
+            s.status === 'approved'
+              ? '✓ Approved'
+              : s.status === 'rejected'
+                ? '✗ Rejected'
+                : 'Cancelled';
+          const statusCls =
+            s.status === 'approved'
+              ? 'text-fairway-deep'
+              : s.status === 'rejected'
+                ? 'text-flag'
+                : 'text-zinc-500';
+          return (
+            <li
+              key={s.id}
+              className="rounded-lg border border-zinc-100 px-3 py-2 dark:border-zinc-800"
+            >
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <span className={`text-xs font-semibold ${statusCls}`}>
+                  {statusLabel}
+                </span>
+                <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">
+                  {s.resolvedAt
+                    ? new Date(s.resolvedAt).toLocaleString()
+                    : '—'}
+                </span>
+              </div>
+              <div className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">
+                <span className="font-semibold">
+                  {s.participantDisplayName}
+                </span>
+                :{' '}
+                <span className="text-flag line-through">
+                  {s.droppedGolferName}
+                </span>{' '}
+                →{' '}
+                <span className="text-fairway-deep dark:text-fairway-light">
+                  {s.newGolferName}
+                </span>
               </div>
             </li>
           );
