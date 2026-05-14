@@ -201,7 +201,7 @@ async function safeStats(): Promise<HomepageStats> {
       activePools: 0,
       activePlayers: 0,
       beersOnTheLine: 0,
-      stakeMentions: { hotDogs: 0, soups: 0, pizzas: 0, other: 0 },
+      stakeTotals: { beers: 0, hotDogs: 0, hotSoup: 0, other: 0 },
     };
   }
 }
@@ -261,30 +261,16 @@ function WeekendStats({
   stats: HomepageStats;
   hasLive: boolean;
 }) {
-  const { activePools, activePlayers, beersOnTheLine, stakeMentions } = stats;
-  if (activePools === 0 && beersOnTheLine === 0) {
+  const { activePools, activePlayers, beersOnTheLine, stakeTotals } = stats;
+  if (activePools === 0 && beersOnTheLine === 0 && stakeTotals.beers === 0) {
     return null;
   }
-  const stakeChips: Array<{ emoji: string; n: number; label: string }> = [];
-  if (stakeMentions.hotDogs > 0) {
-    stakeChips.push({
-      emoji: '🌭',
-      n: stakeMentions.hotDogs,
-      label: `pool${stakeMentions.hotDogs === 1 ? '' : 's'} with hot dogs`,
-    });
-  }
-  if (stakeMentions.soups > 0) {
-    stakeChips.push({
-      emoji: '🥣',
-      n: stakeMentions.soups,
-      label: `with soup`,
-    });
-  }
-  if (stakeMentions.pizzas > 0) {
-    stakeChips.push({
-      emoji: '🍕',
-      n: stakeMentions.pizzas,
-      label: `with pizza`,
+  const otherChips: Array<{ emoji: string; n: number; label: string }> = [];
+  if (stakeTotals.other > 0) {
+    otherChips.push({
+      emoji: '🎁',
+      n: stakeTotals.other,
+      label: `bespoke wager${stakeTotals.other === 1 ? '' : 's'}`,
     });
   }
 
@@ -296,41 +282,46 @@ function WeekendStats({
       </div>
       <div className="grid grid-cols-3 divide-x divide-zinc-100 dark:divide-zinc-800">
         <Stat
-          value={beersOnTheLine}
-          label="beer on the line"
-          plural="beers on the line"
+          value={stakeTotals.beers}
+          label="beer wagered"
+          plural="beers wagered"
           emoji="🍺"
         />
         <Stat
-          value={activePlayers}
-          label="player playing"
-          plural="players playing"
-          emoji="⛳"
+          value={stakeTotals.hotDogs}
+          label="hot dog wagered"
+          plural="hot dogs wagered"
+          emoji="🌭"
         />
         <Stat
-          value={activePools}
-          label="active pool"
-          plural="active pools"
-          emoji="🏆"
+          value={stakeTotals.hotSoup}
+          label="hot soup wagered"
+          plural="hot soups wagered"
+          emoji="🥣"
         />
       </div>
-      {stakeChips.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-2 border-t border-zinc-100 px-4 py-2.5 text-xs text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
-          <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-zinc-500">
-            Also at stake
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-100 px-4 py-2.5 text-xs text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
+        <span className="font-medium">
+          <span className="font-mono font-semibold tabular-nums">
+            {activePlayers}
+          </span>{' '}
+          player{activePlayers === 1 ? '' : 's'} across{' '}
+          <span className="font-mono font-semibold tabular-nums">
+            {activePools}
+          </span>{' '}
+          active pool{activePools === 1 ? '' : 's'}
+        </span>
+        {otherChips.map((c) => (
+          <span
+            key={c.emoji}
+            className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 dark:bg-zinc-800"
+          >
+            <span>{c.emoji}</span>
+            <span className="font-mono font-semibold">{c.n}</span>
+            <span className="text-zinc-500">{c.label}</span>
           </span>
-          {stakeChips.map((c) => (
-            <span
-              key={c.emoji}
-              className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 dark:bg-zinc-800"
-            >
-              <span>{c.emoji}</span>
-              <span className="font-mono font-semibold">{c.n}</span>
-              <span className="text-zinc-500">{c.label}</span>
-            </span>
-          ))}
-        </div>
-      ) : null}
+        ))}
+      </div>
       {beersOnTheLine > 0 ? (
         <p className="border-t border-zinc-100 px-4 py-2 text-center text-[11px] italic text-zinc-500 dark:border-zinc-800">
           {pickFlavor(beersOnTheLine)}

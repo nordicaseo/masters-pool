@@ -32,8 +32,17 @@ export const createGameSchema = z
     maxPlayers: z.number().int().min(2).max(10).optional(),
     /** Display names of the manual roster, when rosterMode === 'manual'. */
     manualPlayerNames: z.array(z.string().min(1).max(40)).max(10).optional(),
-    /** Free-text stakes — what the group is playing for. */
+    /** Free-text stakes — legacy fallback / display string. */
     stakes: z.string().max(200).optional(),
+    /** Structured stakes — capped quantities so nobody types "1000000 beers". */
+    stakeItems: z
+      .object({
+        beers: z.number().int().min(0).max(99).optional(),
+        hotDogs: z.number().int().min(0).max(99).optional(),
+        hotSoup: z.number().int().min(0).max(99).optional(),
+        other: z.string().max(120).optional(),
+      })
+      .optional(),
     /** Earliest round that counts (1..4). Use > 1 to skip already-played days. */
     startRound: z.number().int().min(1).max(4).optional(),
   })

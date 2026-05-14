@@ -36,7 +36,10 @@ export function CreateGameForm({
   const [manualName, setManualName] = useState('');
   const [poolName, setPoolName] = useState('');
   const [createdByName, setCreatedByName] = useState(suggestedName ?? '');
-  const [stakes, setStakes] = useState('');
+  const [beers, setBeers] = useState(0);
+  const [hotDogs, setHotDogs] = useState(0);
+  const [hotSoup, setHotSoup] = useState(0);
+  const [otherStakes, setOtherStakes] = useState('');
   const [startRound, setStartRound] = useState<number>(1);
   const [rules, setRules] = useState<ScoringRules>(DEFAULT_SCORING_RULES);
   const [showRules, setShowRules] = useState(false);
@@ -113,7 +116,15 @@ export function CreateGameForm({
           draftMode,
           maxPlayers: rosterMode === 'open' && draftMode === 'snake' ? maxPlayers : undefined,
           manualPlayerNames: rosterMode === 'manual' ? cleanedManualNames : undefined,
-          stakes: stakes.trim() || undefined,
+          stakeItems:
+            beers > 0 || hotDogs > 0 || hotSoup > 0 || otherStakes.trim()
+              ? {
+                  ...(beers > 0 ? { beers } : {}),
+                  ...(hotDogs > 0 ? { hotDogs } : {}),
+                  ...(hotSoup > 0 ? { hotSoup } : {}),
+                  ...(otherStakes.trim() ? { other: otherStakes.trim() } : {}),
+                }
+              : undefined,
           startRound: startRound > 1 ? startRound : undefined,
         }),
       });
@@ -199,44 +210,53 @@ export function CreateGameForm({
       </Step>
 
       <Step number={2} title="Name your pool">
-        <div className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Pool name">
-              <input
-                value={poolName}
-                onChange={(e) => setPoolName(e.target.value)}
-                placeholder={suggestedPoolName || 'My pool'}
-                maxLength={80}
-                className="h-11 w-full rounded-lg border border-zinc-200 bg-cream px-3 outline-none transition focus:border-fairway focus:ring-2 focus:ring-fairway/30 dark:border-zinc-700 dark:bg-zinc-950"
-              />
-            </Field>
-            <Field label="Your name">
-              <input
-                value={createdByName}
-                onChange={(e) => setCreatedByName(e.target.value)}
-                placeholder="Who's running this?"
-                maxLength={40}
-                required
-                className="h-11 w-full rounded-lg border border-zinc-200 bg-cream px-3 outline-none transition focus:border-fairway focus:ring-2 focus:ring-fairway/30 dark:border-zinc-700 dark:bg-zinc-950"
-              />
-            </Field>
-          </div>
-          <Field label="Stakes (optional)">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Pool name">
             <input
-              value={stakes}
-              onChange={(e) => setStakes(e.target.value)}
-              placeholder="a beer, hot dogs, hot soup"
-              maxLength={200}
+              value={poolName}
+              onChange={(e) => setPoolName(e.target.value)}
+              placeholder={suggestedPoolName || 'My pool'}
+              maxLength={80}
               className="h-11 w-full rounded-lg border border-zinc-200 bg-cream px-3 outline-none transition focus:border-fairway focus:ring-2 focus:ring-fairway/30 dark:border-zinc-700 dark:bg-zinc-950"
             />
-            <p className="mt-1 text-xs text-zinc-500">
-              What is the group playing for? Shown on the pool page.
-            </p>
+          </Field>
+          <Field label="Your name">
+            <input
+              value={createdByName}
+              onChange={(e) => setCreatedByName(e.target.value)}
+              placeholder="Who's running this?"
+              maxLength={40}
+              required
+              className="h-11 w-full rounded-lg border border-zinc-200 bg-cream px-3 outline-none transition focus:border-fairway focus:ring-2 focus:ring-fairway/30 dark:border-zinc-700 dark:bg-zinc-950"
+            />
           </Field>
         </div>
       </Step>
 
-      <Step number={3} title="Format">
+      <Step number={3} title="Stakes (optional)">
+        <p className="-mt-2 mb-3 text-xs text-zinc-500">
+          What&apos;s on the line? Shown on the pool page so everyone knows
+          what they&apos;re losing (or winning).
+        </p>
+        <div className="space-y-3 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="grid grid-cols-3 gap-3">
+            <CountField label="🍺 Beers" value={beers} onChange={setBeers} />
+            <CountField label="🌭 Hot dogs" value={hotDogs} onChange={setHotDogs} />
+            <CountField label="🥣 Hot soups" value={hotSoup} onChange={setHotSoup} />
+          </div>
+          <Field label="Anything else (optional)">
+            <input
+              value={otherStakes}
+              onChange={(e) => setOtherStakes(e.target.value)}
+              placeholder="loser does dishes, winner picks the next round…"
+              maxLength={120}
+              className="h-10 w-full rounded-lg border border-zinc-200 bg-cream px-3 outline-none focus:border-fairway dark:border-zinc-700 dark:bg-zinc-950"
+            />
+          </Field>
+        </div>
+      </Step>
+
+      <Step number={4} title="Format">
         <div className="space-y-5 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
           <div>
             <SectionLabel>Roster</SectionLabel>
@@ -304,7 +324,7 @@ export function CreateGameForm({
         </div>
       </Step>
 
-      <Step number={4} title="Scoring">
+      <Step number={5} title="Scoring">
         <div className="rounded-xl border border-zinc-200 bg-white p-1 dark:border-zinc-800 dark:bg-zinc-900">
           <button
             type="button"
@@ -520,6 +540,56 @@ function ManualEntry({
           className="h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 dark:border-zinc-700 dark:bg-zinc-950"
         />
       </Field>
+    </div>
+  );
+}
+
+function CountField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  const dec = () => onChange(Math.max(0, value - 1));
+  const inc = () => onChange(Math.min(99, value + 1));
+  return (
+    <div>
+      <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-400">
+        {label}
+      </p>
+      <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-cream px-1 py-1 dark:border-zinc-700 dark:bg-zinc-950">
+        <button
+          type="button"
+          onClick={dec}
+          disabled={value === 0}
+          aria-label={`Decrease ${label}`}
+          className="h-8 w-8 rounded-md text-lg text-zinc-700 transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-30 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        >
+          −
+        </button>
+        <input
+          type="number"
+          min={0}
+          max={99}
+          value={value}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            if (Number.isFinite(n)) onChange(Math.min(99, Math.max(0, Math.floor(n))));
+          }}
+          className="h-8 w-full bg-transparent text-center font-mono text-lg font-semibold outline-none"
+        />
+        <button
+          type="button"
+          onClick={inc}
+          aria-label={`Increase ${label}`}
+          className="h-8 w-8 rounded-md text-lg text-zinc-700 transition hover:bg-zinc-200 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        >
+          +
+        </button>
+      </div>
     </div>
   );
 }
