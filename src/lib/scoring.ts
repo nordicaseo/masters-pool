@@ -413,6 +413,31 @@ export function deriveScoreToPar(
   return perHole.reduce((sum, e) => sum + STROKE_DELTA[e.kind], 0);
 }
 
+/**
+ * Parse a leaderboard position string ("1", "T4", "T38", "CUT", "WD")
+ * into a sortable number. Lower = better.
+ *
+ * Strategy:
+ *  - "1", "T4", "38", "T38" → the numeric part (4, 38, etc.).
+ *  - "CUT", "WD", "DQ", "DNS" → a constant just below the top of the
+ *    sentinel range so cut/withdrawn golfers sort below everyone with a
+ *    real position.
+ *  - null / unparseable → +Infinity so they sort at the very bottom
+ *    (pre-tournament tee sheets often have no position assigned yet).
+ */
+export function parseFinishingPosition(position: string | null | undefined): number {
+  if (!position) return Number.POSITIVE_INFINITY;
+  const trimmed = position.trim().toUpperCase();
+  const m = /^T?(\d+)$/.exec(trimmed);
+  if (m) return Number(m[1]);
+  if (trimmed === 'CUT' || trimmed === 'WD' || trimmed === 'DQ' || trimmed === 'DNS') {
+    // Sentinel below Infinity so they're distinguishable in sort order if needed
+    // (cut/WD ahead of "no position at all").
+    return 1_000_000;
+  }
+  return Number.POSITIVE_INFINITY;
+}
+
 export async function golferTotals(gameId: number): Promise<GolferTotal[]> {
   const field = await db
     .select({
@@ -471,7 +496,20 @@ export async function golferTotals(gameId: number): Promise<GolferTotal[]> {
         points,
       };
     })
-    .sort((a, b) => b.points - a.points);
+    // Sort like a real golf leaderboard: by finishing position ascending
+    // (1, T4, T38, …), then by score-to-par ascending as a tiebreaker
+    // (pre-tournament when nobody has a position yet), then by name so
+    // the order is stable. Pool points are NOT the primary sort — that's
+    // what the pool leaderboard is for.
+    .sort((a, b) => {
+      const pa = parseFinishingPosition(a.position);
+      const pb = parseFinishingPosition(b.position);
+      if (pa !== pb) return pa - pb;
+      const sa = a.scoreToPar ?? Number.POSITIVE_INFINITY;
+      const sb = b.scoreToPar ?? Number.POSITIVE_INFINITY;
+      if (sa !== sb) return sa - sb;
+      return a.name.localeCompare(b.name);
+    });
 }
 
 export type ParticipantTotal = {

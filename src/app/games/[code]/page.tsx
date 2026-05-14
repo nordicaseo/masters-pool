@@ -6,6 +6,7 @@ import { getParticipantForGame } from '@/lib/auth';
 import { auth } from '@clerk/nextjs/server';
 import { DeletePoolButton } from './delete-pool-button';
 import { HouseRules } from './house-rules';
+import { FieldLeaderboard } from './field-leaderboard';
 import { canSubstitute } from '@/lib/substitutions';
 
 export const dynamic = 'force-dynamic';
@@ -124,15 +125,24 @@ export default async function GamePage(props: PageProps<'/games/[code]'>) {
         </section>
 
         <section>
-          <SectionHeader title="Field leaderboard" subtitle={`${golfers.length} golfers`} />
+          <SectionHeader title="Field leaderboard" />
           {golfers.length === 0 ? (
             <EmptyState message="Field publishes a day or two before the tournament — check back closer to round 1." />
           ) : (
-            <FieldScorecard
+            <FieldLeaderboard
               gameCode={game.code}
-              golfers={golfers}
-              holdersByGolfer={holdersByGolfer}
-              colorByParticipant={colorByParticipant}
+              rows={golfers.map((g) => ({
+                ...g,
+                holders: (holdersByGolfer.get(g.golferId) ?? []).map((h) => {
+                  const c = colorByParticipant.get(h.participantId);
+                  return {
+                    participantId: h.participantId,
+                    displayName: h.displayName,
+                    swatch: c?.swatch ?? '',
+                    rowTint: c?.rowTint ?? '',
+                  };
+                }),
+              }))}
               myParticipantId={myParticipantId}
             />
           )}
@@ -438,136 +448,3 @@ function PickChip({
   );
 }
 
-function FieldScorecard({
-  gameCode,
-  golfers,
-  holdersByGolfer,
-  colorByParticipant,
-  myParticipantId,
-}: {
-  gameCode: string;
-  golfers: Array<{
-    golferId: number;
-    name: string;
-    country: string | null;
-    position: string | null;
-    scoreToPar: number | null;
-    missedCut: boolean;
-    points: number;
-  }>;
-  holdersByGolfer: Map<number, Array<{ participantId: number; displayName: string }>>;
-  colorByParticipant: Map<number, ParticipantColor>;
-  myParticipantId: number | null;
-}) {
-  return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="scorecard-stripe grid grid-cols-[3.5rem_1fr_4rem_4.5rem] gap-2 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.15em] text-white sm:grid-cols-[4rem_1fr_5rem_5rem]">
-        <span>Pos</span>
-        <span>Golfer</span>
-        <span className="text-right">To par</span>
-        <span className="text-right">Points</span>
-      </div>
-      <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
-        {golfers.map((g) => {
-          const holders = holdersByGolfer.get(g.golferId) ?? [];
-          const isMine =
-            myParticipantId !== null &&
-            holders.some((h) => h.participantId === myParticipantId);
-          const myColor =
-            isMine && myParticipantId !== null
-              ? colorByParticipant.get(myParticipantId)
-              : null;
-          return (
-            <li key={g.golferId}>
-              <Link
-                href={`/games/${gameCode}/golfer/${g.golferId}`}
-                className={`grid grid-cols-[3.5rem_1fr_4rem_4.5rem] items-center gap-2 px-4 py-2 text-sm transition hover:bg-fairway-light/30 dark:hover:bg-fairway-deep/20 sm:grid-cols-[4rem_1fr_5rem_5rem] ${
-                  myColor ? myColor.rowTint : ''
-                }`}
-              >
-                <span className="font-mono text-xs font-semibold text-zinc-500">
-                  {g.position ?? '—'}
-                </span>
-                <span className="flex min-w-0 items-center gap-2">
-                  <PickedByDots
-                    holders={holders}
-                    colorByParticipant={colorByParticipant}
-                    myParticipantId={myParticipantId}
-                  />
-                  <span className="truncate">
-                    {g.name}
-                    {g.missedCut ? <span className="ml-1">🍺</span> : null}
-                  </span>
-                </span>
-              <span className="text-right">
-                <ScoreToPar value={g.scoreToPar} />
-              </span>
-              <span
-                className={`text-right font-mono font-semibold tabular-nums ${
-                  g.points > 0
-                    ? 'text-fairway'
-                    : g.points < 0
-                      ? 'text-flag'
-                      : 'text-zinc-500'
-                }`}
-              >
-                  {g.points}
-                </span>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
-
-function PickedByDots({
-  holders,
-  colorByParticipant,
-  myParticipantId,
-}: {
-  holders: Array<{ participantId: number; displayName: string }>;
-  colorByParticipant: Map<number, ParticipantColor>;
-  myParticipantId: number | null;
-}) {
-  if (holders.length === 0) return null;
-  // Put YOU first so your color anchors the row at a glance.
-  const ordered = [...holders].sort((a, b) => {
-    if (a.participantId === myParticipantId) return -1;
-    if (b.participantId === myParticipantId) return 1;
-    return a.participantId - b.participantId;
-  });
-  return (
-    <span className="flex shrink-0 items-center -space-x-1">
-      {ordered.map((h) => {
-        const color = colorByParticipant.get(h.participantId);
-        if (!color) return null;
-        return (
-          <span
-            key={h.participantId}
-            title={
-              h.participantId === myParticipantId
-                ? `${h.displayName} (you)`
-                : h.displayName
-            }
-            className={`h-2.5 w-2.5 rounded-full ring-2 ring-white dark:ring-zinc-900 ${color.swatch}`}
-          />
-        );
-      })}
-    </span>
-  );
-}
-
-function ScoreToPar({ value }: { value: number | null }) {
-  if (value === null) return <span className="font-mono text-zinc-400">—</span>;
-  if (value === 0)
-    return <span className="font-mono font-semibold text-zinc-700 dark:text-zinc-200">E</span>;
-  if (value < 0)
-    return (
-      <span className="font-mono font-semibold text-flag">{value}</span>
-    );
-  return (
-    <span className="font-mono text-zinc-700 dark:text-zinc-200">+{value}</span>
-  );
-}
