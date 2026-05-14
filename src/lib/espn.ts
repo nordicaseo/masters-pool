@@ -111,6 +111,10 @@ export type ScheduledTournament = {
   startDate: string; // ISO
   state: TournamentState;
   isMajor: boolean;
+  /** Current round number (1..4) for in-progress events. Null otherwise. */
+  currentRound: number | null;
+  /** ESPN's text status, e.g. "Round 1 - In Progress" or "Final". */
+  statusDetail: string | null;
 };
 
 const MAJOR_NAMES = [
@@ -151,17 +155,33 @@ export async function fetchSeasonSchedule(year: number): Promise<ScheduledTourna
       shortName?: string;
       date: string;
       status?: { type?: { state?: TournamentState } };
+      competitions?: Array<{
+        status?: {
+          period?: number;
+          type?: { detail?: string; shortDetail?: string };
+        };
+      }>;
     }>;
   };
   const events = data.events ?? [];
-  return events.map((e) => ({
-    espnEventId: e.id,
-    name: e.name,
-    shortName: e.shortName ?? e.name,
-    startDate: e.date,
-    state: (e.status?.type?.state ?? 'pre') as TournamentState,
-    isMajor: isMajor(e.name),
-  }));
+  return events.map((e) => {
+    const compStatus = e.competitions?.[0]?.status;
+    const state = (e.status?.type?.state ?? 'pre') as TournamentState;
+    return {
+      espnEventId: e.id,
+      name: e.name,
+      shortName: e.shortName ?? e.name,
+      startDate: e.date,
+      state,
+      isMajor: isMajor(e.name),
+      currentRound:
+        state === 'in' && typeof compStatus?.period === 'number'
+          ? compStatus.period
+          : null,
+      statusDetail:
+        compStatus?.type?.detail ?? compStatus?.type?.shortDetail ?? null,
+    };
+  });
 }
 
 // ---------- parsing ----------
