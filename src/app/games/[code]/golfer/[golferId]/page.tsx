@@ -74,6 +74,13 @@ export default async function GolferScorecardPage(
 
   const rounds = summary ? parseRounds(summary) : [];
 
+  // Compute live to-par directly from the per-hole data we just fetched.
+  // `golfer.scoreToPar` is the cached value from the last cron sync, which
+  // can be 5-30 minutes stale during a live round. Per-hole data is exact
+  // for every hole the golfer has completed — so a player at -3 through 6
+  // holes shows -3 here even when ESPN's aggregate still says "E".
+  const liveScoreToPar = computeScoreToParFromRounds(rounds);
+
   return (
     <main className="min-h-screen bg-cream dark:bg-zinc-950">
       <Header
@@ -82,7 +89,7 @@ export default async function GolferScorecardPage(
           name: golfer.name,
           country: golfer.country,
           position: golfer.position,
-          scoreToPar: golfer.scoreToPar,
+          scoreToPar: liveScoreToPar ?? golfer.scoreToPar,
           missedCut: golfer.missedCut === 1,
         }}
         totalPoints={totalPoints}
@@ -101,6 +108,24 @@ export default async function GolferScorecardPage(
       </div>
     </main>
   );
+}
+
+/**
+ * Sum (strokes - par) across every played hole in every round. Returns
+ * null when no hole has both a stroke count and a par recorded, so the
+ * caller can fall back to the cached `golfers.scoreToPar` value.
+ */
+function computeScoreToParFromRounds(rounds: Round[]): number | null {
+  let total = 0;
+  let any = false;
+  for (const r of rounds) {
+    for (const h of r.holes) {
+      if (h.strokes === null || h.par === null) continue;
+      total += h.strokes - h.par;
+      any = true;
+    }
+  }
+  return any ? total : null;
 }
 
 function parseRounds(summary: EspnCompetitorSummary): Round[] {
