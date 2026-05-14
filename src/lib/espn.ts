@@ -45,6 +45,18 @@ export type EspnCompetitor = {
     type?: { name?: string; description?: string };
   };
   score?: { value?: number; displayValue?: string };
+  /**
+   * Per-round summary. The `displayValue` per round (e.g. "-4", "-1") is
+   * what ESPN updates *progressively as a round is played* — strictly
+   * more current than the cumulative `score.displayValue` above, which
+   * can lag by several minutes during a live round. Empty / missing
+   * entries indicate a round that hasn't been played yet.
+   */
+  linescores?: Array<{
+    value?: number;
+    displayValue?: string;
+    period?: number;
+  }>;
   athlete: {
     id: string;
     displayName: string;
@@ -183,8 +195,18 @@ export function parseField(lb: EspnLeaderboard): {
       (c.status?.type?.description ?? '').toUpperCase().includes('CUT');
 
     // ESPN's score.value on the leaderboard is sometimes total strokes, not
-    // score-to-par; the displayValue ("E", "-7", "+3") is the reliable source.
-    const scoreToPar = parseScoreToPar(c.score?.displayValue);
+    // score-to-par; the displayValue ("E", "-7", "+3") looks like the
+    // reliable source but in practice it lags the per-round summary by
+    // several minutes during a live round (a golfer can be -3 mid-round and
+    // still read "E" from this field).
+    //
+    // The per-round `linescores[].displayValue` updates progressively as the
+    // round is played, so summing those is strictly more current. Fall back
+    // to the cumulative aggregate when no per-round entry has a displayValue
+    // yet (pre-tournament).
+    const scoreToPar =
+      sumLinescoreDisplayValues(c.linescores) ??
+      parseScoreToPar(c.score?.displayValue);
 
     return {
       espnAthleteId: c.athlete.id,
@@ -206,6 +228,26 @@ function parseScoreToPar(display: string | undefined): number | null {
   if (v === '--' || v === '') return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Sum the `displayValue` of every linescore entry that has one. Returns
+ * null when none are populated (pre-tournament or pre-round-1). Exported
+ * so it can be unit-tested against captured ESPN payloads.
+ */
+export function sumLinescoreDisplayValues(
+  linescores: Array<{ displayValue?: string }> | undefined,
+): number | null {
+  if (!linescores || linescores.length === 0) return null;
+  let total = 0;
+  let any = false;
+  for (const ls of linescores) {
+    const parsed = parseScoreToPar(ls.displayValue);
+    if (parsed === null) continue;
+    total += parsed;
+    any = true;
+  }
+  return any ? total : null;
 }
 
 /**
