@@ -34,6 +34,8 @@ export const createGameSchema = z
     manualPlayerNames: z.array(z.string().min(1).max(40)).max(10).optional(),
     /** Free-text stakes — what the group is playing for. */
     stakes: z.string().max(200).optional(),
+    /** Earliest round that counts (1..4). Use > 1 to skip already-played days. */
+    startRound: z.number().int().min(1).max(4).optional(),
   })
   .refine(
     (v) =>

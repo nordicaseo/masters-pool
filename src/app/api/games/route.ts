@@ -42,6 +42,7 @@ export async function POST(request: Request) {
       createdByName,
       createdByUserId: userId,
       stakes: parsed.data.stakes,
+      startRound: parsed.data.startRound,
     });
     return Response.json({ gameId, code });
   } catch (error) {

@@ -132,6 +132,17 @@ export const games = pgTable(
      * Used as a cheap "is the draft live?" flag for the UI.
      */
     draftStartedAt: timestamp('draft_started_at', { withTimezone: true }),
+    /**
+     * Earliest tournament round (1..4) that counts toward scoring in this
+     * pool. Defaults to 1 — pools that exist before tee-off score every
+     * round. A pool created mid-tournament can set this to skip days that
+     * already happened (e.g. start_round = 2 = "Day-1 scores don't count").
+     *
+     * Applied through `picks.start_round` at pick-insert time, so the
+     * existing round-aware scoring engine handles it automatically — no
+     * special case in scoring totals.
+     */
+    startRound: integer('start_round').notNull().default(1),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex('games_code_unique').on(t.code)],

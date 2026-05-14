@@ -11,16 +11,20 @@ export function HouseRules({
   scoringRules,
   draftMode,
   rosterMode,
+  startRound,
 }: {
   scoringRules: ScoringRules;
   draftMode: DraftMode;
   rosterMode: RosterMode;
+  /** Earliest tournament round that counts. 1 = full tournament. */
+  startRound: number;
 }) {
   const r = scoringRules;
   const costs = topPickCosts(r);
   const costsActive = costs.some((c) => c !== 0);
 
-  // Format row: how many picks, what kind of draft, what kind of roster.
+  // Format row: how many picks, what kind of draft, what kind of roster,
+  // plus a late-start tag when this pool skips earlier rounds.
   const formatChips: ChipSpec[] = [
     {
       emoji: '🏌️',
@@ -33,6 +37,12 @@ export function HouseRules({
       ? { emoji: '📋', label: 'Manual roster' }
       : { emoji: '🚪', label: 'Open join' },
   ];
+  if (startRound > 1) {
+    formatChips.push({
+      emoji: '⏩',
+      label: `Scoring from R${startRound}`,
+    });
+  }
 
   // Per-hole. Keep the order birdies-good → bogeys-bad for legibility.
   const holeChips: ChipSpec[] = [
