@@ -5,9 +5,12 @@ import {
   golfers,
   participants,
   picks,
+  formatStakeItems,
+  hasStakeItems,
   type DraftMode,
   type RosterMode,
   type ScoringRules,
+  type StakeItems,
 } from '@/db/schema';
 import { fetchLeaderboard, parseField } from './espn';
 import { generateGameCode, normalizeGameCode } from './code';
@@ -75,8 +78,10 @@ export async function createGameWithField(input: {
   /** Names of manual participants, when rosterMode === 'manual'. The
    *  creator is added separately as participant 1; these are players 2..N. */
   manualPlayerNames?: string[];
-  /** Free-text stakes, e.g. "a beer, hot dogs, hot soup". */
+  /** Free-text stakes — legacy fallback / human summary. */
   stakes?: string;
+  /** Structured stakes (preferred). Used by the new create-form step. */
+  stakeItems?: StakeItems;
   /**
    * Earliest round that counts (1..4). Defaults to 1. Use a value > 1
    * when the pool is being created mid-tournament — picks inserted later
@@ -115,8 +120,33 @@ export async function createGameWithField(input: {
   const { field } = parseField(lb);
 
   // 4. Create the game row.
-  const trimmedStakes = input.stakes?.trim();
   const startRound = clampStartRound(input.startRound);
+  // Sanitize structured stakes — strip empty/zero entries so the JSONB row
+  // doesn't carry no-op fields, and trim `other` text.
+  const normalizedItems: StakeItems | null = input.stakeItems
+    ? {
+        ...(input.stakeItems.beers && input.stakeItems.beers > 0
+          ? { beers: input.stakeItems.beers }
+          : {}),
+        ...(input.stakeItems.hotDogs && input.stakeItems.hotDogs > 0
+          ? { hotDogs: input.stakeItems.hotDogs }
+          : {}),
+        ...(input.stakeItems.hotSoup && input.stakeItems.hotSoup > 0
+          ? { hotSoup: input.stakeItems.hotSoup }
+          : {}),
+        ...(input.stakeItems.other?.trim()
+          ? { other: input.stakeItems.other.trim() }
+          : {}),
+      }
+    : null;
+  const itemsToStore = hasStakeItems(normalizedItems)
+    ? normalizedItems
+    : null;
+  // Always populate the legacy text column with a summary — keeps old code
+  // paths and external readers backwards-compatible. Falls back to the
+  // free-text input if no structured items.
+  const stakesText =
+    formatStakeItems(itemsToStore) || input.stakes?.trim() || null;
   const [game] = await db
     .insert(games)
     .values({
@@ -125,7 +155,8 @@ export async function createGameWithField(input: {
       espnEventId: input.espnEventId,
       tournamentName: input.tournamentName,
       scoringRules: input.scoringRules,
-      stakes: trimmedStakes ? trimmedStakes : null,
+      stakes: stakesText,
+      stakeItems: itemsToStore,
       createdByName: input.createdByName,
       createdByUserId: input.createdByUserId,
       rosterMode: input.rosterMode,

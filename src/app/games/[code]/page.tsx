@@ -364,6 +364,7 @@ function GameHeader({
     tournamentName: string;
     status: string;
     stakes: string | null;
+    stakeItems: import('@/db/schema').StakeItems | null;
   };
   needsToPick: boolean;
   needsToJoin: boolean;
@@ -380,14 +381,7 @@ function GameHeader({
             <h1 className="mt-1 font-display text-4xl font-black tracking-tight">
               {game.name}
             </h1>
-            {game.stakes ? (
-              <p className="mt-2 text-sm text-fairway-light/90">
-                <span className="font-semibold uppercase tracking-wider text-fairway-light/70">
-                  Playing for:
-                </span>{' '}
-                <span className="font-medium text-white">{game.stakes}</span>
-              </p>
-            ) : null}
+            <StakesLine stakes={game.stakes} stakeItems={game.stakeItems} />
             <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-fairway-light/90">
               <span>
                 Join code{' '}
@@ -423,6 +417,66 @@ function GameHeader({
         </div>
       </div>
     </header>
+  );
+}
+
+function StakesLine({
+  stakes,
+  stakeItems,
+}: {
+  stakes: string | null;
+  stakeItems: import('@/db/schema').StakeItems | null;
+}) {
+  const chips: Array<{ emoji: string; label: string }> = [];
+  if (stakeItems) {
+    if ((stakeItems.beers ?? 0) > 0) {
+      chips.push({
+        emoji: '🍺',
+        label: `${stakeItems.beers} beer${stakeItems.beers === 1 ? '' : 's'}`,
+      });
+    }
+    if ((stakeItems.hotDogs ?? 0) > 0) {
+      chips.push({
+        emoji: '🌭',
+        label: `${stakeItems.hotDogs} hot dog${stakeItems.hotDogs === 1 ? '' : 's'}`,
+      });
+    }
+    if ((stakeItems.hotSoup ?? 0) > 0) {
+      chips.push({
+        emoji: '🥣',
+        label: `${stakeItems.hotSoup} hot soup${stakeItems.hotSoup === 1 ? '' : 's'}`,
+      });
+    }
+    if (stakeItems.other?.trim()) {
+      chips.push({ emoji: '🎁', label: stakeItems.other.trim() });
+    }
+  }
+  if (chips.length === 0) {
+    if (!stakes) return null;
+    return (
+      <p className="mt-2 text-sm text-fairway-light/90">
+        <span className="font-semibold uppercase tracking-wider text-fairway-light/70">
+          Playing for:
+        </span>{' '}
+        <span className="font-medium text-white">{stakes}</span>
+      </p>
+    );
+  }
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-sm">
+      <span className="font-semibold uppercase tracking-wider text-fairway-light/70">
+        Playing for:
+      </span>
+      {chips.map((c, i) => (
+        <span
+          key={i}
+          className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-xs font-medium text-white"
+        >
+          <span aria-hidden>{c.emoji}</span>
+          <span>{c.label}</span>
+        </span>
+      ))}
+    </div>
   );
 }
 

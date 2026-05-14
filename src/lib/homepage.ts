@@ -11,7 +11,13 @@
 
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
-import { games, golfers, participants, picks } from '@/db/schema';
+import {
+  games,
+  golfers,
+  participants,
+  picks,
+  type StakeItems,
+} from '@/db/schema';
 
 export type HomepageStats = {
   /** Count of active pools (`status IN (pre, in)`). */
@@ -23,12 +29,19 @@ export type HomepageStats = {
    * across every pool in any status. Each cut pick = one beer.
    */
   beersOnTheLine: number;
-  /** Pools whose `stakes` text contains "hot dog" / "soup" / "pizza" — keyword counts. */
-  stakeMentions: {
+  /**
+   * Real, summed stake quantities across all active pools. Pulled from
+   * the structured `stake_items` JSONB; pools created before that field
+   * existed contribute nothing here (their free-text `stakes` is not
+   * keyword-scanned anymore — the structured form is the source of truth
+   * going forward).
+   */
+  stakeTotals: {
+    beers: number;
     hotDogs: number;
-    soups: number;
-    pizzas: number;
-    other: number; // pools with a stakes value not matching the above
+    hotSoup: number;
+    /** Number of active pools with a non-empty `other` field. */
+    other: number;
   };
 };
 
@@ -37,7 +50,7 @@ const STATES_ACTIVE = ['pre', 'in'] as const;
 export async function getHomepageStats(): Promise<HomepageStats> {
   // Active pools — id list reused below.
   const activeGames = await db
-    .select({ id: games.id, stakes: games.stakes })
+    .select({ id: games.id, stakeItems: games.stakeItems })
     .from(games)
     .where(inArray(games.status, STATES_ACTIVE as unknown as string[]));
 
@@ -65,33 +78,18 @@ export async function getHomepageStats(): Promise<HomepageStats> {
     .where(and(eq(picks.endRound, 99), eq(golfers.missedCut, 1)));
   const beersOnTheLine = beerRows[0]?.count ?? 0;
 
-  // Stake-keyword counts. Free-text matching is fuzzy ("a hot dog and a
-  // diet coke" matches hotDogs). Done in JS so callers can read the
-  // pattern.
-  const stakeMentions = {
-    hotDogs: 0,
-    soups: 0,
-    pizzas: 0,
-    other: 0,
-  };
+  // Sum structured stake quantities. Pools without `stake_items` are
+  // silently ignored — the legacy text-keyword scan was fuzzy and made
+  // for misleading totals; better to under-report than misreport.
+  const stakeTotals = { beers: 0, hotDogs: 0, hotSoup: 0, other: 0 };
   for (const g of activeGames) {
-    if (!g.stakes) continue;
-    const lower = g.stakes.toLowerCase();
-    let matched = false;
-    if (lower.includes('hot dog') || lower.includes('hotdog')) {
-      stakeMentions.hotDogs += 1;
-      matched = true;
-    }
-    if (lower.includes('soup')) {
-      stakeMentions.soups += 1;
-      matched = true;
-    }
-    if (lower.includes('pizza')) {
-      stakeMentions.pizzas += 1;
-      matched = true;
-    }
-    if (!matched) stakeMentions.other += 1;
+    const items = g.stakeItems as StakeItems | null;
+    if (!items) continue;
+    stakeTotals.beers += items.beers ?? 0;
+    stakeTotals.hotDogs += items.hotDogs ?? 0;
+    stakeTotals.hotSoup += items.hotSoup ?? 0;
+    if (items.other?.trim()) stakeTotals.other += 1;
   }
 
-  return { activePools, activePlayers, beersOnTheLine, stakeMentions };
+  return { activePools, activePlayers, beersOnTheLine, stakeTotals };
 }

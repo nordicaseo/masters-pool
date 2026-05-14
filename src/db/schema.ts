@@ -10,6 +10,58 @@ import {
 } from 'drizzle-orm/pg-core';
 
 /**
+ * Structured stakes — what the group is playing for. Each numeric field
+ * is a count (e.g. `beers: 3` = "3 beers on the line"). `other` is a
+ * catch-all string for anything that doesn't fit the canonical items.
+ *
+ * All fields optional so the form can submit only what's set.
+ */
+export type StakeItems = {
+  beers?: number;
+  hotDogs?: number;
+  hotSoup?: number;
+  other?: string;
+};
+
+/**
+ * Human-readable summary like "3 beers · 2 hot dogs · 1 hot soup · doing
+ * the dishes". Used to populate the legacy `games.stakes` text column so
+ * older code paths (or any future client that only knows about that
+ * field) still has something to render. Pure.
+ */
+export function formatStakeItems(items: StakeItems | null | undefined): string {
+  if (!items) return '';
+  const parts: string[] = [];
+  if (items.beers && items.beers > 0) {
+    parts.push(`${items.beers} beer${items.beers === 1 ? '' : 's'}`);
+  }
+  if (items.hotDogs && items.hotDogs > 0) {
+    parts.push(`${items.hotDogs} hot dog${items.hotDogs === 1 ? '' : 's'}`);
+  }
+  if (items.hotSoup && items.hotSoup > 0) {
+    parts.push(`${items.hotSoup} hot soup${items.hotSoup === 1 ? '' : 's'}`);
+  }
+  const otherTrimmed = items.other?.trim();
+  if (otherTrimmed) parts.push(otherTrimmed);
+  return parts.join(' · ');
+}
+
+/**
+ * True iff at least one field of the StakeItems object would render. Used
+ * by the display code to decide between the structured chips and the
+ * legacy `stakes` text fallback.
+ */
+export function hasStakeItems(items: StakeItems | null | undefined): boolean {
+  if (!items) return false;
+  return (
+    (items.beers ?? 0) > 0 ||
+    (items.hotDogs ?? 0) > 0 ||
+    (items.hotSoup ?? 0) > 0 ||
+    Boolean(items.other?.trim())
+  );
+}
+
+/**
  * Default scoring rules. Every game gets a copy of this at creation time
  * which can then be edited per-game. Changing these defaults later does
  * NOT affect existing games — point values are denormalized at the time
@@ -108,9 +160,21 @@ export const games = pgTable(
     tournamentName: text('tournament_name').notNull(),
     /** Per-game scoring rules. Snapshot at creation time. */
     scoringRules: jsonb('scoring_rules').$type<ScoringRules>().notNull(),
-    /** What the group is playing for — free-text, e.g. "a beer, hot dogs,
-     *  hot soup". Nullable since older pools predate this field. */
+    /**
+     * Legacy free-text stakes ("a beer, hot dogs, hot soup"). Kept around
+     * for old pools that predate the structured `stakeItems` field. New
+     * pools should write a humanized summary string here AND the structured
+     * data to `stakeItems`, so anything that only reads `stakes` (e.g. an
+     * old client cache) still has something to display.
+     */
     stakes: text('stakes'),
+    /**
+     * Structured stakes. Lets the create form ask "how many beers / hot
+     * dogs / hot soups", and lets the homepage roll up real totals across
+     * pools instead of keyword-scanning free text. Nullable for pools that
+     * predate this field — display falls back to `stakes`.
+     */
+    stakeItems: jsonb('stake_items').$type<StakeItems>(),
     /** Tournament status as of the last cron tick: pre, in, post. */
     status: text('status').notNull().default('pre'),
     createdByName: text('created_by_name').notNull(),
