@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   DEFAULT_SCORING_RULES,
+  DEFAULT_TOP_PICK_COSTS,
   type DraftMode,
   type RosterMode,
   type ScoringRules,
@@ -334,6 +335,28 @@ export function CreateGameForm({
                   <NumberField label="1st place" value={rules.finish_1} onChange={(v) => setRule('finish_1', v)} />
                   <NumberField label="2nd place" value={rules.finish_2} onChange={(v) => setRule('finish_2', v)} />
                   <NumberField label="3rd place" value={rules.finish_3} onChange={(v) => setRule('finish_3', v)} />
+                </div>
+              </div>
+              <div>
+                <SectionLabel>Top-pick substitution cost</SectionLabel>
+                <p className="-mt-1 mb-2 text-xs text-zinc-500">
+                  Cost charged if you substitute IN a golfer currently 1st–5th
+                  on the leaderboard. Leave at 0 to make subs free.
+                </p>
+                <div className="grid grid-cols-5 gap-3">
+                  {(rules.top_pick_costs ?? DEFAULT_TOP_PICK_COSTS).map((c, i) => (
+                    <NumberField
+                      key={i}
+                      label={`#${i + 1}`}
+                      value={c}
+                      max={0}
+                      onChange={(v) => {
+                        const next = [...(rules.top_pick_costs ?? DEFAULT_TOP_PICK_COSTS)];
+                        next[i] = Math.min(0, v);
+                        setRule('top_pick_costs', next);
+                      }}
+                    />
+                  ))}
                 </div>
               </div>
               <div>

@@ -31,7 +31,20 @@ export type ScoringRules = {
   picks_per_user: number;
   /** how to handle ties on the podium: 'split_floor' | 'full' */
   tie_handling: 'split_floor' | 'full';
+  /**
+   * Cost (negative points) charged when a participant SUBSTITUTES IN a
+   * golfer who is currently in the top 5 on the leaderboard. Index 0 is
+   * the cost for the current leader, index 4 is the cost for #5. Defaults
+   * to a mild [-3, -2, -1, 0, 0]. Original picks (drafted before round 1)
+   * are NEVER charged this cost — only swaps made during the day-1/day-2
+   * substitution windows. Stored on the game's scoring_rules JSON so
+   * older pools created before this field shipped fall back to defaults
+   * at read time via `topPickCosts(rules)`.
+   */
+  top_pick_costs?: number[];
 };
+
+export const DEFAULT_TOP_PICK_COSTS: number[] = [-3, -2, -1, 0, 0];
 
 export const DEFAULT_SCORING_RULES: ScoringRules = {
   hole_in_one: 7,
@@ -47,7 +60,22 @@ export const DEFAULT_SCORING_RULES: ScoringRules = {
   finish_3: 5,
   picks_per_user: 3,
   tie_handling: 'split_floor',
+  top_pick_costs: DEFAULT_TOP_PICK_COSTS,
 };
+
+/**
+ * Resolve top-pick costs from a (possibly old) scoring rules object,
+ * returning the default `[-3, -2, -1, 0, 0]` if the field is missing or
+ * malformed. Always returns exactly 5 entries.
+ */
+export function topPickCosts(rules: ScoringRules): number[] {
+  const arr = rules.top_pick_costs;
+  if (!Array.isArray(arr) || arr.length !== 5) return DEFAULT_TOP_PICK_COSTS;
+  if (arr.some((n) => typeof n !== 'number' || !Number.isFinite(n))) {
+    return DEFAULT_TOP_PICK_COSTS;
+  }
+  return arr;
+}
 
 /**
  * How players are added to a pool:
@@ -180,11 +208,62 @@ export const picks = pgTable(
     golferId: integer('golfer_id')
       .notNull()
       .references(() => golfers.id, { onDelete: 'cascade' }),
+    /**
+     * Round inclusive bounds for when this pick is active on a participant's
+     * roster. New picks default to (1, 99) — active for the whole tournament.
+     * When a participant substitutes a pick out after round R, the dropped
+     * pick's `endRound` becomes R (it earned points through round R) and the
+     * new pick is inserted with `startRound = R + 1`. Round-0 events (finish
+     * bonuses, missed_cut markers) only count for picks with `endRound = 99`,
+     * i.e. picks the participant is still holding at the end.
+     */
+    startRound: integer('start_round').notNull().default(1),
+    endRound: integer('end_round').notNull().default(99),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex('picks_participant_golfer_unique').on(t.participantId, t.golferId),
     index('picks_participant_idx').on(t.participantId),
+  ],
+);
+
+/**
+ * The "swap window" a substitution was used in. Each participant gets at
+ * most one substitution per window.
+ */
+export type SubstitutionWindow = 'day_1' | 'day_2';
+
+export const substitutions = pgTable(
+  'substitutions',
+  {
+    id: serial('id').primaryKey(),
+    gameId: integer('game_id')
+      .notNull()
+      .references(() => games.id, { onDelete: 'cascade' }),
+    participantId: integer('participant_id')
+      .notNull()
+      .references(() => participants.id, { onDelete: 'cascade' }),
+    /** 'day_1' or 'day_2'. Each participant can use each window at most once. */
+    window: text('window').$type<SubstitutionWindow>().notNull(),
+    /** The pick row that was dropped. Its `endRound` was set to the prior round. */
+    droppedPickId: integer('dropped_pick_id')
+      .notNull()
+      .references(() => picks.id, { onDelete: 'cascade' }),
+    /** The fresh pick row for the new golfer (startRound = current_round). */
+    newPickId: integer('new_pick_id')
+      .notNull()
+      .references(() => picks.id, { onDelete: 'cascade' }),
+    /**
+     * Top-pick cost charged for this substitution. 0 if the new pick was
+     * outside the top 5 at swap time. Subtracted from the participant's
+     * total in `participantTotals`.
+     */
+    costPoints: integer('cost_points').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('substitutions_participant_window_unique').on(t.participantId, t.window),
+    index('substitutions_game_idx').on(t.gameId),
   ],
 );
 

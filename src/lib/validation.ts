@@ -15,6 +15,8 @@ export const scoringRulesSchema = z.object({
   finish_3: z.number().int(),
   picks_per_user: z.number().int().min(1).max(10),
   tie_handling: z.enum(['split_floor', 'full']),
+  /** Cost for substituting in a top-1..top-5 golfer; exactly 5 entries. */
+  top_pick_costs: z.array(z.number().int().min(-50).max(0)).length(5).optional(),
 });
 
 export const createGameSchema = z
@@ -59,4 +61,13 @@ export const joinGameSchema = z.object({
 
 export const submitPicksSchema = z.object({
   golferIds: z.array(z.number().int().positive()),
+});
+
+export const substitutionSchema = z.object({
+  /** Pick id to drop from your current roster. */
+  droppedPickId: z.number().int().positive(),
+  /** Golfer id to add. */
+  newGolferId: z.number().int().positive(),
+  /** Optional — only set when the creator subs on behalf of a manual participant. */
+  participantId: z.number().int().positive().optional(),
 });
