@@ -77,6 +77,7 @@ export default async function PickPage(props: PageProps<'/games/[code]/pick'>) {
       country: golfersTable.country,
       position: golfersTable.position,
       scoreToPar: golfersTable.scoreToPar,
+      missedCut: golfersTable.missedCut,
     })
     .from(golfersTable)
     .where(eq(golfersTable.gameId, game.id));
@@ -85,7 +86,13 @@ export default async function PickPage(props: PageProps<'/games/[code]/pick'>) {
     const picker = allParts.find((pp) => pp.id === p.participantId);
     if (picker) pickedByName.set(p.golferId, picker.displayName);
   }
-  const annotatedField = fieldRows
+  // For late-start pools (start_round > 2 — i.e. starting after the cut),
+  // cut golfers aren't playing anymore, so they shouldn't be pickable.
+  const filteredField =
+    game.startRound > 2
+      ? fieldRows.filter((g) => g.missedCut === 0)
+      : fieldRows;
+  const annotatedField = filteredField
     .map((g) => ({
       id: g.id,
       name: g.name,
@@ -264,6 +271,7 @@ function FreePickPage({
     tournamentName: string;
     name: string;
     scoringRules: { picks_per_user: number };
+    startRound: number;
   };
   me: { displayName: string };
 }) {
@@ -280,6 +288,7 @@ async function FreePickAsync({
     tournamentName: string;
     name: string;
     scoringRules: { picks_per_user: number };
+    startRound: number;
   };
   me: { displayName: string };
 }) {
@@ -290,10 +299,13 @@ async function FreePickAsync({
       country: golfersTable.country,
       position: golfersTable.position,
       scoreToPar: golfersTable.scoreToPar,
+      missedCut: golfersTable.missedCut,
     })
     .from(golfersTable)
     .where(eq(golfersTable.gameId, game.id));
-  const sorted = [...field].sort((a, b) => {
+  const filtered =
+    game.startRound > 2 ? field.filter((g) => g.missedCut === 0) : field;
+  const sorted = [...filtered].sort((a, b) => {
     const ap = a.scoreToPar ?? 999;
     const bp = b.scoreToPar ?? 999;
     if (ap !== bp) return ap - bp;

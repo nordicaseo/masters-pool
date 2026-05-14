@@ -37,6 +37,7 @@ export function CreateGameForm({
   const [poolName, setPoolName] = useState('');
   const [createdByName, setCreatedByName] = useState(suggestedName ?? '');
   const [stakes, setStakes] = useState('');
+  const [startRound, setStartRound] = useState<number>(1);
   const [rules, setRules] = useState<ScoringRules>(DEFAULT_SCORING_RULES);
   const [showRules, setShowRules] = useState(false);
   const [rosterMode, setRosterMode] = useState<RosterMode>('open');
@@ -113,6 +114,7 @@ export function CreateGameForm({
           maxPlayers: rosterMode === 'open' && draftMode === 'snake' ? maxPlayers : undefined,
           manualPlayerNames: rosterMode === 'manual' ? cleanedManualNames : undefined,
           stakes: stakes.trim() || undefined,
+          startRound: startRound > 1 ? startRound : undefined,
         }),
       });
       const data = await res.json();
@@ -188,6 +190,9 @@ export function CreateGameForm({
                   </div>
                 ) : null}
               </div>
+            ) : null}
+            {selected && selected.state !== 'pre' ? (
+              <StartRoundPicker value={startRound} onChange={setStartRound} />
             ) : null}
           </div>
         )}
@@ -515,6 +520,43 @@ function ManualEntry({
           className="h-11 w-full rounded-lg border border-zinc-200 bg-white px-3 dark:border-zinc-700 dark:bg-zinc-950"
         />
       </Field>
+    </div>
+  );
+}
+
+function StartRoundPicker({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/30">
+      <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-amber-700 dark:text-amber-300">
+        Late start?
+      </p>
+      <p className="mt-0.5 text-xs text-amber-900 dark:text-amber-200">
+        The tournament is already underway. Skip already-played rounds so
+        their points don&apos;t count for this pool. Picks always count from
+        the selected round onward.
+      </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {[1, 2, 3, 4].map((r) => (
+          <button
+            key={r}
+            type="button"
+            onClick={() => onChange(r)}
+            className={`inline-flex h-8 items-center rounded-full border px-3 text-xs font-semibold transition ${
+              value === r
+                ? 'border-fairway bg-fairway text-white'
+                : 'border-zinc-300 bg-white text-zinc-700 hover:border-fairway hover:text-fairway dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300'
+            }`}
+          >
+            From round {r}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

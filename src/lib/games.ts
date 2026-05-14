@@ -16,6 +16,52 @@ import { nextSlot, shuffleWithSeed } from './draft';
 
 const MAX_CODE_RETRIES = 8;
 
+/** Clamp a user-supplied start_round into the valid range 1..4. */
+function clampStartRound(v: number | undefined): number {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return 1;
+  return Math.min(4, Math.max(1, Math.floor(v)));
+}
+
+/**
+ * Heuristic — given the per-competitor linescores from an ESPN leaderboard
+ * snapshot, suggest a `start_round` for a pool being created right now.
+ *
+ *   - "Round X has at least begun" = any competitor has a populated
+ *     linescore value for round X.
+ *   - "Round X has finished" = a majority of non-cut competitors have a
+ *     populated linescore value for round X.
+ *
+ * Suggested start_round = (number of finished rounds) + 1, capped at 4.
+ *
+ * Pure (no DB / no I/O), so it's easy to unit-test against captured
+ * payloads. Exported for the create-game flow to surface a default.
+ */
+export function suggestStartRound(input: {
+  competitors: Array<{
+    missedCut?: boolean;
+    linescores?: Array<{ value?: number; displayValue?: string; period?: number }>;
+  }>;
+}): number {
+  const inField = input.competitors.filter((c) => !c.missedCut);
+  if (inField.length === 0) return 1;
+  let finished = 0;
+  for (const round of [1, 2, 3, 4]) {
+    const populated = inField.filter((c) =>
+      c.linescores?.some(
+        (ls) =>
+          ls.period === round &&
+          (typeof ls.value === 'number' || !!ls.displayValue),
+      ),
+    ).length;
+    // A round counts as "finished by the field" when at least half of the
+    // competitors have a populated linescore for it. Lower than 50% means
+    // we're still mid-round (or earlier).
+    if (populated < Math.ceil(inField.length / 2)) break;
+    finished = round;
+  }
+  return Math.min(4, finished + 1);
+}
+
 export async function createGameWithField(input: {
   name: string;
   espnEventId: string;
@@ -31,6 +77,13 @@ export async function createGameWithField(input: {
   manualPlayerNames?: string[];
   /** Free-text stakes, e.g. "a beer, hot dogs, hot soup". */
   stakes?: string;
+  /**
+   * Earliest round that counts (1..4). Defaults to 1. Use a value > 1
+   * when the pool is being created mid-tournament — picks inserted later
+   * will get this `start_round`, and the existing scoring engine will
+   * automatically exclude events from earlier rounds.
+   */
+  startRound?: number;
 }): Promise<{ gameId: number; code: string; creatorParticipantId: number }> {
   // 1. Generate a unique code.
   let code = generateGameCode();
@@ -63,6 +116,7 @@ export async function createGameWithField(input: {
 
   // 4. Create the game row.
   const trimmedStakes = input.stakes?.trim();
+  const startRound = clampStartRound(input.startRound);
   const [game] = await db
     .insert(games)
     .values({
@@ -77,6 +131,7 @@ export async function createGameWithField(input: {
       rosterMode: input.rosterMode,
       draftMode: input.draftMode,
       maxPlayers,
+      startRound,
     })
     .returning();
 
@@ -280,6 +335,7 @@ export async function submitPicks(input: {
       input.golferIds.map((golferId) => ({
         participantId: participant.id,
         golferId,
+        startRound: game.startRound,
       })),
     );
     await db
@@ -368,6 +424,7 @@ export async function pickOneGolfer(input: {
     await db.insert(picks).values({
       participantId: participant.id,
       golferId: input.golferId,
+      startRound: game.startRound,
     });
   } catch (error) {
     logError(error, {

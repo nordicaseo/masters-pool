@@ -149,6 +149,7 @@ export default async function GamePage(props: PageProps<'/games/[code]'>) {
           scoringRules={game.scoringRules}
           draftMode={game.draftMode}
           rosterMode={game.rosterMode}
+          startRound={game.startRound}
         />
 
         {resolvedProposals.length > 0 ? (
