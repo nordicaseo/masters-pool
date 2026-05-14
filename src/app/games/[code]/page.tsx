@@ -5,6 +5,7 @@ import { golferTotals, participantTotals } from '@/lib/scoring';
 import { getParticipantForGame } from '@/lib/auth';
 import { auth } from '@clerk/nextjs/server';
 import { DeletePoolButton } from './delete-pool-button';
+import { HouseRules } from './house-rules';
 import { canSubstitute } from '@/lib/substitutions';
 
 export const dynamic = 'force-dynamic';
@@ -93,6 +94,12 @@ export default async function GamePage(props: PageProps<'/games/[code]'>) {
         {subWindow && myParticipantId !== null ? (
           <SubstitutionBanner gameCode={game.code} window={subWindow} />
         ) : null}
+
+        <HouseRules
+          scoringRules={game.scoringRules}
+          draftMode={game.draftMode}
+          rosterMode={game.rosterMode}
+        />
 
         <section className="mb-10">
           <SectionHeader title="Pool leaderboard" subtitle={`${users.length} player${users.length === 1 ? '' : 's'}`} />
