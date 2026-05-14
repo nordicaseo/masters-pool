@@ -8,6 +8,12 @@ import { DeletePoolButton } from './delete-pool-button';
 import { HouseRules } from './house-rules';
 import { FieldLeaderboard } from './field-leaderboard';
 import { canSubstitute } from '@/lib/substitutions';
+import {
+  diffScoringRules,
+  getPendingProposal,
+  getRecentResolvedProposals,
+} from '@/lib/rule-changes';
+import { RuleProposalBanner } from './rule-proposal-banner';
 
 export const dynamic = 'force-dynamic';
 
@@ -79,6 +85,26 @@ export default async function GamePage(props: PageProps<'/games/[code]'>) {
     }
   }
 
+  // Rule-change proposals: the open one (if any) gets a prominent banner;
+  // resolved ones show in a small audit history below the House rules.
+  const [pendingProposal, resolvedProposals] = await Promise.all([
+    getPendingProposal(game.id),
+    getRecentResolvedProposals(game.id, 5),
+  ]);
+  const pendingDiff = pendingProposal
+    ? diffScoringRules(pendingProposal.beforeRules, pendingProposal.afterRules)
+    : [];
+  const callerVote = pendingProposal && myParticipantId !== null
+    ? pendingProposal.voters.find((v) => v.participantId === myParticipantId)
+        ?.vote ?? null
+    : null;
+  const callerIsEligibleVoter =
+    pendingProposal && myParticipantId !== null
+      ? pendingProposal.voters.some(
+          (v) => v.participantId === myParticipantId,
+        )
+      : false;
+
   return (
     <main className="min-h-screen bg-cream dark:bg-zinc-950">
       <GameHeader
@@ -96,11 +122,38 @@ export default async function GamePage(props: PageProps<'/games/[code]'>) {
           <SubstitutionBanner gameCode={game.code} window={subWindow} />
         ) : null}
 
+        {pendingProposal ? (
+          <RuleProposalBanner
+            gameCode={game.code}
+            proposalId={pendingProposal.id}
+            proposerDisplayName={
+              pendingProposal.voters.find(
+                (v) => v.userId === pendingProposal.proposedByUserId,
+              )?.displayName ?? 'The creator'
+            }
+            isProposer={userId === pendingProposal.proposedByUserId}
+            callerCanVote={callerIsEligibleVoter && callerVote === null}
+            callerHasVoted={callerVote !== null}
+            voters={pendingProposal.voters.map((v) => ({
+              participantId: v.participantId,
+              displayName: v.displayName,
+              vote: v.vote,
+            }))}
+            diff={pendingDiff}
+            approveCount={pendingProposal.tally.approveCount}
+            eligibleCount={pendingProposal.tally.eligibleCount}
+          />
+        ) : null}
+
         <HouseRules
           scoringRules={game.scoringRules}
           draftMode={game.draftMode}
           rosterMode={game.rosterMode}
         />
+
+        {resolvedProposals.length > 0 ? (
+          <ResolvedProposalsList proposals={resolvedProposals} />
+        ) : null}
 
         <section className="mb-10">
           <SectionHeader title="Pool leaderboard" subtitle={`${users.length} player${users.length === 1 ? '' : 's'}`} />
@@ -153,11 +206,94 @@ export default async function GamePage(props: PageProps<'/games/[code]'>) {
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.15em] text-zinc-500">
               Creator tools
             </p>
-            <DeletePoolButton gameCode={game.code} gameName={game.name} />
+            <div className="flex flex-wrap items-center gap-3">
+              {game.status !== 'post' && !pendingProposal ? (
+                <Link
+                  href={`/games/${game.code}/edit-rules`}
+                  className="inline-flex h-9 items-center gap-2 rounded-full border border-fairway/40 px-4 text-sm font-semibold text-fairway transition hover:bg-fairway/10"
+                >
+                  ✎ Propose rule change
+                </Link>
+              ) : null}
+              <DeletePoolButton gameCode={game.code} gameName={game.name} />
+            </div>
           </section>
         ) : null}
       </div>
     </main>
+  );
+}
+
+function ResolvedProposalsList({
+  proposals,
+}: {
+  proposals: Array<{
+    id: number;
+    status: 'approved' | 'rejected' | 'cancelled' | 'pending';
+    proposedByUserId: string;
+    proposedAt: Date;
+    resolvedAt: Date | null;
+    beforeRules: import('@/db/schema').ScoringRules;
+    afterRules: import('@/db/schema').ScoringRules;
+  }>;
+}) {
+  return (
+    <details className="mb-8 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <summary className="cursor-pointer select-none text-[10px] font-bold uppercase tracking-[0.15em] text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300">
+        Rule change history · {proposals.length}
+      </summary>
+      <ul className="mt-3 space-y-2">
+        {proposals.map((p) => {
+          const diff = diffScoringRules(p.beforeRules, p.afterRules);
+          const statusLabel =
+            p.status === 'approved'
+              ? '✓ Approved'
+              : p.status === 'rejected'
+                ? '✗ Rejected'
+                : 'Cancelled';
+          const statusCls =
+            p.status === 'approved'
+              ? 'text-fairway-deep'
+              : p.status === 'rejected'
+                ? 'text-flag'
+                : 'text-zinc-500';
+          return (
+            <li
+              key={p.id}
+              className="rounded-lg border border-zinc-100 px-3 py-2 dark:border-zinc-800"
+            >
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <span className={`text-xs font-semibold ${statusCls}`}>
+                  {statusLabel}
+                </span>
+                <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">
+                  {p.resolvedAt
+                    ? new Date(p.resolvedAt).toLocaleString()
+                    : '—'}
+                </span>
+              </div>
+              <div className="mt-1 flex flex-wrap gap-2 text-xs text-zinc-600 dark:text-zinc-300">
+                {diff.length === 0 ? (
+                  <span className="text-zinc-500">(no-op)</span>
+                ) : (
+                  diff.map((d) => (
+                    <span
+                      key={d.key}
+                      className="font-mono"
+                    >
+                      <span className="text-zinc-500">{d.label}:</span>{' '}
+                      <span className="text-flag line-through">{d.before}</span>{' '}
+                      →{' '}
+                      <span className="text-fairway-deep">{d.after}</span>
+                    </span>
+                  ))
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </details>
   );
 }
 

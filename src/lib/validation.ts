@@ -63,6 +63,14 @@ export const submitPicksSchema = z.object({
   golferIds: z.array(z.number().int().positive()),
 });
 
+export const proposeRulesSchema = z.object({
+  afterRules: scoringRulesSchema,
+});
+
+export const voteOnProposalSchema = z.object({
+  vote: z.enum(['approve', 'reject']),
+});
+
 export const substitutionSchema = z.object({
   /** Pick id to drop from your current roster. */
   droppedPickId: z.number().int().positive(),
