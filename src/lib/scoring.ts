@@ -6,6 +6,7 @@ import {
   participants,
   picks,
   scoringEvents,
+  substitutions,
   type ScoringEventKind,
   type ScoringRules,
 } from '@/db/schema';
@@ -397,42 +398,122 @@ export type ParticipantTotal = {
   participantId: number;
   displayName: string;
   points: number;
+  /** ACTIVE picks (endRound = 99) — the participant's current roster. */
   picks: Array<{ golferId: number; name: string; points: number; missedCut: boolean; position: string | null }>;
+  /** Total negative cost from any substitutions the participant has used. */
+  substitutionCost: number;
 };
 
+/**
+ * Whether a `scoring_events` row counts toward a given pick's bounded
+ * active period.
+ *
+ * Per-hole events (round 1..4): event.round must fall in
+ * [pick.startRound, pick.endRound].
+ *
+ * Round-0 events (finish bonuses, missed_cut markers) represent
+ * end-of-tournament outcomes — they only count for a pick that the
+ * participant is still holding at the end (endRound = 99).
+ */
+export function eventCountsForPick(
+  event: { round: number },
+  pick: { startRound: number; endRound: number },
+): boolean {
+  if (event.round === 0) return pick.endRound === 99;
+  return event.round >= pick.startRound && event.round <= pick.endRound;
+}
+
 export async function participantTotals(gameId: number): Promise<ParticipantTotal[]> {
+  // 1. Roster.
   const parts = await db
-    .select()
+    .select({ id: participants.id, displayName: participants.displayName })
     .from(participants)
     .where(eq(participants.gameId, gameId));
+  if (parts.length === 0) return [];
 
-  const golferTotalsList = await golferTotals(gameId);
-  const totalByGolfer = new Map(golferTotalsList.map((g) => [g.golferId, g]));
+  // 2. Every pick in this game (active + already-dropped).
+  const allPicks = await db
+    .select({
+      id: picks.id,
+      participantId: picks.participantId,
+      golferId: picks.golferId,
+      startRound: picks.startRound,
+      endRound: picks.endRound,
+      name: golfers.name,
+      missedCut: golfers.missedCut,
+      position: golfers.position,
+    })
+    .from(picks)
+    .innerJoin(golfers, eq(picks.golferId, golfers.id))
+    .innerJoin(participants, eq(picks.participantId, participants.id))
+    .where(eq(participants.gameId, gameId));
+
+  // 3. Every scoring event in this game.
+  const events = await db
+    .select({
+      golferId: scoringEvents.golferId,
+      round: scoringEvents.round,
+      points: scoringEvents.points,
+    })
+    .from(scoringEvents)
+    .where(eq(scoringEvents.gameId, gameId));
+
+  // 4. Substitution costs per participant.
+  const subs = await db
+    .select({
+      participantId: substitutions.participantId,
+      costPoints: substitutions.costPoints,
+    })
+    .from(substitutions)
+    .where(eq(substitutions.gameId, gameId));
+
+  // Index events by golfer for O(picks + events) scoring.
+  const eventsByGolfer = new Map<number, Array<{ round: number; points: number }>>();
+  for (const e of events) {
+    const arr = eventsByGolfer.get(e.golferId) ?? [];
+    arr.push({ round: e.round, points: e.points });
+    eventsByGolfer.set(e.golferId, arr);
+  }
+
+  const subCostByParticipant = new Map<number, number>();
+  for (const s of subs) {
+    subCostByParticipant.set(
+      s.participantId,
+      (subCostByParticipant.get(s.participantId) ?? 0) + s.costPoints,
+    );
+  }
 
   const result: ParticipantTotal[] = [];
-  for (const p of parts) {
-    const pickRows = await db
-      .select({ golferId: picks.golferId, name: golfers.name })
-      .from(picks)
-      .innerJoin(golfers, eq(picks.golferId, golfers.id))
-      .where(eq(picks.participantId, p.id));
+  for (const part of parts) {
+    let earned = 0;
+    const activePicks: ParticipantTotal['picks'] = [];
 
-    const enriched = pickRows.map((pk) => {
-      const t = totalByGolfer.get(pk.golferId);
-      return {
-        golferId: pk.golferId,
-        name: pk.name,
-        points: t?.points ?? 0,
-        missedCut: t?.missedCut ?? false,
-        position: t?.position ?? null,
-      };
-    });
+    for (const pk of allPicks) {
+      if (pk.participantId !== part.id) continue;
+      const golferEvents = eventsByGolfer.get(pk.golferId) ?? [];
+      const pickPoints = golferEvents
+        .filter((e) => eventCountsForPick(e, pk))
+        .reduce((s, e) => s + e.points, 0);
+      earned += pickPoints;
 
+      if (pk.endRound === 99) {
+        activePicks.push({
+          golferId: pk.golferId,
+          name: pk.name,
+          points: pickPoints,
+          missedCut: pk.missedCut === 1,
+          position: pk.position,
+        });
+      }
+    }
+
+    const subCost = subCostByParticipant.get(part.id) ?? 0;
     result.push({
-      participantId: p.id,
-      displayName: p.displayName,
-      points: enriched.reduce((sum, e) => sum + e.points, 0),
-      picks: enriched,
+      participantId: part.id,
+      displayName: part.displayName,
+      points: earned + subCost, // costPoints stored as negative integers
+      picks: activePicks,
+      substitutionCost: subCost,
     });
   }
 
