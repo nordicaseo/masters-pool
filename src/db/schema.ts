@@ -233,6 +233,64 @@ export const picks = pgTable(
  */
 export type SubstitutionWindow = 'day_1' | 'day_2';
 
+/**
+ * Lifecycle of a creator-proposed rule change.
+ *
+ *   pending  — open; awaiting votes from every participant with a Clerk user.
+ *   approved — every eligible voter approved. `applyApprovedProposal` has
+ *              updated `games.scoring_rules` and recomputed
+ *              `scoring_events.points` retroactively.
+ *   rejected — at least one eligible voter rejected. No changes applied.
+ *   cancelled — the proposer cancelled before any reject came in.
+ */
+export type ProposalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+export const ruleChangeProposals = pgTable('rule_change_proposals', {
+  id: serial('id').primaryKey(),
+  gameId: integer('game_id')
+    .notNull()
+    .references(() => games.id, { onDelete: 'cascade' }),
+  /** Clerk user id of the participant who opened the proposal (creator-only in v1). */
+  proposedByUserId: text('proposed_by_user_id').notNull(),
+  proposedAt: timestamp('proposed_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  /** Snapshot of the rules at proposal time. Used for the diff UI + audit trail. */
+  beforeRules: jsonb('before_rules').$type<ScoringRules>().notNull(),
+  /** Rules to apply if/when the proposal is approved. */
+  afterRules: jsonb('after_rules').$type<ScoringRules>().notNull(),
+  status: text('status').$type<ProposalStatus>().notNull().default('pending'),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+});
+
+export type ProposalVote = 'approve' | 'reject';
+
+export const ruleChangeVotes = pgTable(
+  'rule_change_votes',
+  {
+    id: serial('id').primaryKey(),
+    proposalId: integer('proposal_id')
+      .notNull()
+      .references(() => ruleChangeProposals.id, { onDelete: 'cascade' }),
+    /**
+     * The voting participant. Participants without a Clerk user (manual
+     * roster members) are not eligible to vote, so this references a
+     * participant row whose `user_id` is set at vote time.
+     */
+    participantId: integer('participant_id')
+      .notNull()
+      .references(() => participants.id, { onDelete: 'cascade' }),
+    vote: text('vote').$type<ProposalVote>().notNull(),
+    votedAt: timestamp('voted_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('rule_change_votes_unique').on(t.proposalId, t.participantId),
+    index('rule_change_votes_proposal_idx').on(t.proposalId),
+  ],
+);
+
 export const substitutions = pgTable(
   'substitutions',
   {
