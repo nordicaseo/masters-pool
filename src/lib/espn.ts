@@ -70,6 +70,9 @@ export type EspnCompetitorSummary = {
     period: number; // round number (1-4)
     value?: number;
     displayValue?: string;
+    /** ISO timestamp of this golfer's tee-off for the round. Useful to
+     *  show in the empty state when the round hasn't been played yet. */
+    teeTime?: string;
     linescores: Array<{
       value: number; // strokes
       period: number; // hole number (1-18)
@@ -94,7 +97,13 @@ export async function fetchCompetitorSummary(
   eventId: string,
   athleteId: string,
 ): Promise<EspnCompetitorSummary> {
-  const url = `${COMPETITOR_SUMMARY_URL}/${encodeURIComponent(eventId)}/competitorsummary/${encodeURIComponent(athleteId)}`;
+  // Append a per-minute timestamp to the URL so any intermediate cache
+  // (Next.js data cache, Vercel edge, CDN, etc.) can't serve a stale
+  // body — `cache: 'no-store'` *should* be enough, but in practice we've
+  // seen the per-hole feed lag behind even when the leaderboard is
+  // current. A unique URL per minute is belt-and-braces.
+  const cacheBust = Math.floor(Date.now() / 60_000);
+  const url = `${COMPETITOR_SUMMARY_URL}/${encodeURIComponent(eventId)}/competitorsummary/${encodeURIComponent(athleteId)}?_=${cacheBust}`;
   const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) {
     throw new Error(`ESPN competitorsummary ${res.status} for ${eventId}/${athleteId}`);
