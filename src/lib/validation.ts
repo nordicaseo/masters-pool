@@ -82,6 +82,11 @@ export const voteOnProposalSchema = z.object({
   vote: z.enum(['approve', 'reject']),
 });
 
+export const emergencySwapSchema = z.object({
+  droppedPickId: z.number().int().positive(),
+  newGolferId: z.number().int().positive(),
+});
+
 export const substitutionSchema = z.object({
   /** Pick id to drop from your current roster. */
   droppedPickId: z.number().int().positive(),

@@ -366,6 +366,70 @@ export const ruleChangeVotes = pgTable(
   ],
 );
 
+/**
+ * Reuses the same lifecycle vocab as rule-change proposals.
+ *   pending — awaiting votes from every signed-in participant
+ *   approved — every eligible voter approved; the pick has been swapped
+ *   rejected — at least one voter rejected; no changes
+ *   cancelled — proposer withdrew before resolution
+ */
+export type EmergencySwapStatus = ProposalStatus;
+
+/**
+ * "I picked the wrong golfer" workflow. Distinct from substitutions
+ * (PR 4) because this is a *correction*, not strategy — doesn't burn
+ * the Day-1/Day-2 sub allowance. Available any time before
+ * `games.status = 'post'`. Requires unanimous approval from every
+ * signed-in participant so an honest misclick gets fixed but a
+ * "my pick is losing, let me bail" gets shot down.
+ */
+export const emergencySwapProposals = pgTable('emergency_swap_proposals', {
+  id: serial('id').primaryKey(),
+  gameId: integer('game_id')
+    .notNull()
+    .references(() => games.id, { onDelete: 'cascade' }),
+  /** Clerk user id of the proposer. Must own the dropped pick. */
+  proposedByUserId: text('proposed_by_user_id').notNull(),
+  /** The participant whose roster gets swapped (== proposer's participant row). */
+  participantId: integer('participant_id')
+    .notNull()
+    .references(() => participants.id, { onDelete: 'cascade' }),
+  /** Pick row being replaced. Must be active (`end_round = 99`) at vote time. */
+  droppedPickId: integer('dropped_pick_id')
+    .notNull()
+    .references(() => picks.id, { onDelete: 'cascade' }),
+  /** Golfer the proposer meant to pick. */
+  newGolferId: integer('new_golfer_id')
+    .notNull()
+    .references(() => golfers.id, { onDelete: 'cascade' }),
+  proposedAt: timestamp('proposed_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  status: text('status').$type<ProposalStatus>().notNull().default('pending'),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+});
+
+export const emergencySwapVotes = pgTable(
+  'emergency_swap_votes',
+  {
+    id: serial('id').primaryKey(),
+    proposalId: integer('proposal_id')
+      .notNull()
+      .references(() => emergencySwapProposals.id, { onDelete: 'cascade' }),
+    participantId: integer('participant_id')
+      .notNull()
+      .references(() => participants.id, { onDelete: 'cascade' }),
+    vote: text('vote').$type<ProposalVote>().notNull(),
+    votedAt: timestamp('voted_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('emergency_swap_votes_unique').on(t.proposalId, t.participantId),
+    index('emergency_swap_votes_proposal_idx').on(t.proposalId),
+  ],
+);
+
 export const substitutions = pgTable(
   'substitutions',
   {
