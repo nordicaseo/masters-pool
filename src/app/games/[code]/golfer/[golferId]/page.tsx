@@ -24,6 +24,9 @@ type Round = {
   period: number;
   total: number | null;
   totalDisplay: string | null;
+  /** Scheduled tee-off (ISO). Surfaced in the empty state so the user
+   *  knows *when* this golfer starts the round. */
+  teeTime: string | null;
   holes: Hole[];
 };
 
@@ -149,6 +152,7 @@ function parseRounds(summary: EspnCompetitorSummary): Round[] {
       period: r.period,
       total: typeof r.value === 'number' ? r.value : null,
       totalDisplay: r.displayValue ?? null,
+      teeTime: r.teeTime ?? null,
       holes,
     });
   }
@@ -216,6 +220,49 @@ function Header({
   );
 }
 
+function RoundNotStartedYet({ teeTime }: { teeTime: string | null }) {
+  if (!teeTime) {
+    return (
+      <p className="px-4 py-6 text-center text-sm text-zinc-500">
+        Hasn&apos;t teed off yet.
+      </p>
+    );
+  }
+  const date = new Date(teeTime);
+  const teeDate = Number.isFinite(date.getTime()) ? date : null;
+  if (!teeDate) {
+    return (
+      <p className="px-4 py-6 text-center text-sm text-zinc-500">
+        Hasn&apos;t teed off yet.
+      </p>
+    );
+  }
+  // Today vs another day — most people care about "today at 2:15 PM" vs
+  // a full date for later rounds.
+  const today = new Date();
+  const sameDay =
+    teeDate.getFullYear() === today.getFullYear() &&
+    teeDate.getMonth() === today.getMonth() &&
+    teeDate.getDate() === today.getDate();
+  const time = teeDate.toLocaleTimeString([], {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  const day = teeDate.toLocaleDateString([], {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+  return (
+    <div className="px-4 py-6 text-center text-sm text-zinc-500">
+      <p>Hasn&apos;t teed off yet.</p>
+      <p className="mt-1 font-mono text-xs uppercase tracking-wider">
+        Tees off {sameDay ? `today at ${time}` : `${day} at ${time}`}
+      </p>
+    </div>
+  );
+}
+
 function ScoreToParInline({ value }: { value: number | null }) {
   if (value === null) return <span className="text-fairway-light/70">—</span>;
   if (value === 0) return <span className="font-semibold text-white">E</span>;
@@ -243,9 +290,7 @@ function RoundScorecard({ round }: { round: Round }) {
         </span>
       </div>
       {!hasAny ? (
-        <p className="px-4 py-6 text-center text-sm text-zinc-500">
-          Round hasn&apos;t been played yet.
-        </p>
+        <RoundNotStartedYet teeTime={round.teeTime} />
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full text-xs">
