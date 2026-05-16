@@ -17,8 +17,14 @@ import {
   getPendingSwap,
   getRecentResolvedSwaps,
 } from '@/lib/emergency-swaps';
+import {
+  getGameActivityFeed,
+  getSubstitutionHistoryByParticipant,
+  type SubstitutionHistoryItem,
+} from '@/lib/activity-feed';
 import { RuleProposalBanner } from './rule-proposal-banner';
 import { EmergencySwapBanner } from './emergency-swap-banner';
+import { ActivityFeed } from './activity-feed';
 
 export const dynamic = 'force-dynamic';
 
@@ -90,17 +96,31 @@ export default async function GamePage(props: PageProps<'/games/[code]'>) {
     }
   }
 
-  // Rule-change proposals + emergency swap proposals — fetched together
-  // so the page renders in a single round-trip's worth of waiting. The
-  // pending ones get prominent banners; resolved ones appear in small
-  // audit-history sections below the House rules card.
-  const [pendingProposal, resolvedProposals, pendingSwap, resolvedSwaps] =
-    await Promise.all([
-      getPendingProposal(game.id),
-      getRecentResolvedProposals(game.id, 5),
-      getPendingSwap(game.id),
-      getRecentResolvedSwaps(game.id, 5),
-    ]);
+  // Rule-change proposals + emergency swap proposals + activity feed +
+  // per-participant substitution history — fetched together so the
+  // page renders in a single round-trip's worth of waiting. The pending
+  // proposals get prominent banners; resolved ones appear in small
+  // audit-history sections below the House rules card. The activity
+  // feed populates the sticky sidebar.
+  const [
+    pendingProposal,
+    resolvedProposals,
+    pendingSwap,
+    resolvedSwaps,
+    feedItems,
+    subHistoryByParticipant,
+  ] = await Promise.all([
+    getPendingProposal(game.id),
+    getRecentResolvedProposals(game.id, 5),
+    getPendingSwap(game.id),
+    getRecentResolvedSwaps(game.id, 5),
+    getGameActivityFeed({
+      gameId: game.id,
+      viewerParticipantId: myParticipantId,
+      limit: 50,
+    }),
+    getSubstitutionHistoryByParticipant(game.id),
+  ]);
   const pendingDiff = pendingProposal
     ? diffScoringRules(pendingProposal.beforeRules, pendingProposal.afterRules)
     : [];
@@ -138,7 +158,9 @@ export default async function GamePage(props: PageProps<'/games/[code]'>) {
         )}
       />
 
-      <div className="mx-auto max-w-4xl px-6 py-8">
+      <div className="mx-auto max-w-6xl px-6 py-8">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
+          <div className="min-w-0">
         {subWindow && myParticipantId !== null ? (
           <SubstitutionBanner gameCode={game.code} window={subWindow} />
         ) : null}
@@ -217,6 +239,9 @@ export default async function GamePage(props: PageProps<'/games/[code]'>) {
                   gameCode={game.code}
                   color={colorByParticipant.get(u.participantId) ?? null}
                   isYou={myParticipantId === u.participantId}
+                  subHistory={
+                    subHistoryByParticipant.get(u.participantId) ?? []
+                  }
                 />
               ))}
             </ol>
@@ -279,6 +304,11 @@ export default async function GamePage(props: PageProps<'/games/[code]'>) {
             </div>
           </section>
         ) : null}
+          </div>
+          <div className="lg:sticky lg:top-4 lg:self-start">
+            <ActivityFeed items={feedItems} />
+          </div>
+        </div>
       </div>
     </main>
   );
@@ -649,12 +679,14 @@ function ParticipantRow({
   gameCode,
   color,
   isYou,
+  subHistory,
 }: {
   rank: number;
   participant: ParticipantRow;
   gameCode: string;
   color: ParticipantColor | null;
   isYou: boolean;
+  subHistory: SubstitutionHistoryItem[];
 }) {
   const beers = participant.picks.filter((p) => p.missedCut).length;
   return (
@@ -708,6 +740,35 @@ function ParticipantRow({
         <div className="flex flex-wrap gap-1.5 border-t border-zinc-100 bg-zinc-50/60 px-4 py-2.5 dark:border-zinc-800 dark:bg-zinc-950/40">
           {participant.picks.map((p) => (
             <PickChip key={p.golferId} pick={p} gameCode={gameCode} />
+          ))}
+        </div>
+      ) : null}
+      {subHistory.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-zinc-100 bg-amber-50/40 px-4 py-2 text-[11px] dark:border-zinc-800 dark:bg-amber-950/15">
+          <span className="font-mono text-[9px] font-bold uppercase tracking-[0.15em] text-amber-700 dark:text-amber-300">
+            Subs
+          </span>
+          {subHistory.map((s) => (
+            <span
+              key={s.id}
+              className="inline-flex items-center gap-1 text-zinc-700 dark:text-zinc-300"
+            >
+              <span className="rounded bg-amber-100 px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
+                {s.window === 'day_1' ? 'D1' : 'D2'}
+              </span>
+              <span className="text-flag line-through">
+                {s.droppedGolferName}
+              </span>
+              <span className="text-zinc-400">→</span>
+              <span className="text-fairway-deep dark:text-fairway-light">
+                {s.newGolferName}
+              </span>
+              {s.costPoints < 0 ? (
+                <span className="font-mono text-flag">
+                  ({s.costPoints})
+                </span>
+              ) : null}
+            </span>
           ))}
         </div>
       ) : null}
