@@ -7,6 +7,7 @@ import { golfers as golfersTable, participants, picks } from '@/db/schema';
 import { getGameByCode } from '@/lib/games';
 import { getParticipantForGame } from '@/lib/auth';
 import { nextSlot } from '@/lib/draft';
+import { ShareInvite } from '@/app/_components/share-invite';
 import { PickForm } from './pick-form';
 import { SnakeDraftBoard } from './snake-draft-board';
 
@@ -225,12 +226,9 @@ function RosterWaiting({
         starts as soon as the roster is full and the pick order is drawn at
         random.
       </p>
-      <p className="mt-3 text-xs text-zinc-500">
-        Share the code{' '}
-        <span className="rounded bg-zinc-100 px-2 py-0.5 font-mono font-semibold tracking-[0.2em] dark:bg-zinc-800">
-          {game.code}
-        </span>
-      </p>
+      <div className="mt-3 text-xs">
+        <ShareInvite code={game.code} tone="light" />
+      </div>
       <ul className="mt-4 space-y-1.5">
         {allParts.map((p, i) => (
           <li key={p.id} className="flex items-center gap-2 text-sm">
