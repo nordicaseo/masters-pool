@@ -42,18 +42,26 @@ export function JoinForm() {
         <input
           type="text"
           placeholder="GAME CODE"
+          aria-label="Game code"
           value={code}
-          onChange={(e) => setCode(e.target.value.toUpperCase())}
+          onChange={(e) => setCode(e.target.value.toUpperCase().replace(/\s+/g, ''))}
           maxLength={10}
+          autoCapitalize="characters"
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
           className="h-12 w-full rounded-lg border border-zinc-200 bg-cream px-4 font-mono text-base uppercase tracking-[0.25em] text-zinc-900 outline-none transition focus:border-fairway focus:ring-2 focus:ring-fairway/30 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
           required
         />
         <input
           type="text"
           placeholder="Your name"
+          aria-label="Your name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           maxLength={40}
+          autoComplete="name"
+          autoCapitalize="words"
           className="h-12 w-full rounded-lg border border-zinc-200 bg-cream px-4 text-base text-zinc-900 outline-none transition focus:border-fairway focus:ring-2 focus:ring-fairway/30 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
           required
         />
@@ -66,7 +74,9 @@ export function JoinForm() {
         </button>
       </div>
       {error ? (
-        <p className="mt-3 text-sm font-medium text-flag">{error}</p>
+        <p role="alert" className="mt-3 text-sm font-medium text-flag">
+          {error}
+        </p>
       ) : null}
     </form>
   );

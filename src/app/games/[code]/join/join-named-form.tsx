@@ -46,9 +46,12 @@ export function JoinNamedForm({
       <input
         type="text"
         placeholder="Your name"
+        aria-label="Your name"
         value={name}
         onChange={(e) => setName(e.target.value)}
         maxLength={40}
+        autoComplete="name"
+        autoCapitalize="words"
         required
         className="h-12 w-full rounded-lg border border-zinc-200 bg-cream px-3 outline-none transition focus:border-fairway focus:ring-2 focus:ring-fairway/30 dark:border-zinc-700 dark:bg-zinc-950"
       />
@@ -60,7 +63,9 @@ export function JoinNamedForm({
         {submitting ? 'Joining…' : 'Join the pool'} <span>→</span>
       </button>
       {error ? (
-        <p className="text-sm font-medium text-flag">{error}</p>
+        <p role="alert" className="text-sm font-medium text-flag">
+          {error}
+        </p>
       ) : null}
     </form>
   );
