@@ -4,6 +4,7 @@ import { getGameByCode } from '@/lib/games';
 import { golferTotals, participantTotals } from '@/lib/scoring';
 import { getParticipantForGame } from '@/lib/auth';
 import { auth } from '@clerk/nextjs/server';
+import { ShareInvite } from '@/app/_components/share-invite';
 import { DeletePoolButton } from './delete-pool-button';
 import { HouseRules } from './house-rules';
 import { FieldLeaderboard } from './field-leaderboard';
@@ -541,12 +542,7 @@ function GameHeader({
             </h1>
             <StakesLine stakes={game.stakes} stakeItems={game.stakeItems} />
             <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-fairway-light/90">
-              <span>
-                Join code{' '}
-                <span className="ml-1 rounded-md bg-white/10 px-2 py-0.5 font-mono font-semibold tracking-[0.2em] text-white">
-                  {game.code}
-                </span>
-              </span>
+              <ShareInvite code={game.code} gameName={game.name} tone="dark" />
               {beerCount > 0 ? (
                 <span title={`${beerCount} cut pick${beerCount === 1 ? '' : 's'}`}>
                   🍺 <span className="font-semibold">{beerCount}</span> owed
