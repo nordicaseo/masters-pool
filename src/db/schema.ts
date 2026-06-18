@@ -506,3 +506,21 @@ export const scoringEvents = pgTable(
     index('scoring_events_golfer_idx').on(t.golferId),
   ],
 );
+
+/**
+ * One-time migration aid for the 2026-06 move from the old Clerk dev
+ * instance (patient-cowbird-27) to the dedicated production instance.
+ *
+ * Existing `participants.user_id` values are old-instance Clerk ids. This
+ * table maps each old id to the email that account will sign in with on the
+ * NEW instance. On a returning user's first authenticated load we match
+ * their new email here and rewrite ownership of their `participants` rows to
+ * their new Clerk id (see `relinkLegacyAccount` in `src/lib/auth.ts`). Rows
+ * are deleted as they're consumed, so the table empties itself and the
+ * re-link logic short-circuits once everyone has returned.
+ */
+export const legacyUserEmails = pgTable('legacy_user_emails', {
+  oldUserId: text('old_user_id').primaryKey(),
+  email: text('email').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});

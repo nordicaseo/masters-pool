@@ -5,6 +5,7 @@ import { db } from '@/db';
 import { games, participants } from '@/db/schema';
 import { fetchSeasonSchedule, type ScheduledTournament } from '@/lib/espn';
 import { getHomepageStats, type HomepageStats } from '@/lib/homepage';
+import { relinkLegacyAccount } from '@/lib/auth';
 import { logError } from '@/lib/log';
 import { JoinForm } from './_components/join-form';
 import { SignInButton } from '@clerk/nextjs';
@@ -14,6 +15,11 @@ export const dynamic = 'force-dynamic';
 export default async function Home() {
   const { userId } = await auth();
   const signedIn = Boolean(userId);
+
+  // Account-preservation: a returning user from the old Clerk instance
+  // reclaims their pools on first load (no-op once everyone has returned).
+  // Must run before loadMyPools so the re-linked rows show up immediately.
+  if (userId) await relinkLegacyAccount(userId);
 
   // Three things in parallel — myPools (cheap), schedule (cached), stats (cheap).
   const [myPools, schedule, stats] = await Promise.all([
