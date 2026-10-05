@@ -90,7 +90,7 @@ For Manual+Snake the **creator** picks for the current slot's player on every tu
 - `userTotals(gameId)` and `golferTotals(gameId)` are SQL aggregations: sum of `points` per participant (via picks) and per golfer.
 
 ### Cron (`src/app/api/cron/refresh-scores/route.ts`)
-- Vercel Cron config in `vercel.json` runs every 5 minutes during the tournament window.
+- Vercel Cron config in `vercel.json` runs hourly (`0 * * * *`). Every tick wakes the Neon database, which only suspends after idle time, so a 5-minute cron kept it awake 24/7 (~$160/mo). Switch back to `*/5 * * * *` for a live tournament with active players.
 - Verifies `Authorization: Bearer $CRON_SECRET`, fetches ESPN, diffs, inserts new events.
 - For every active game in the DB, fetches once. Tournaments share an event id so the ESPN call is cached per-invocation.
 
