@@ -6,7 +6,11 @@ import { syncGame } from '@/lib/scoring';
 import { logError, logInfo } from '@/lib/log';
 
 /**
- * Vercel Cron entrypoint. Configured in vercel.json to run every 5 minutes.
+ * Vercel Cron entrypoint. Configured in vercel.json to run hourly (was every
+ * 5 minutes until 2026-10-05: each tick wakes the Neon database, and Neon only
+ * suspends after 5 idle minutes, so a 5-minute cron kept it awake around the
+ * clock). For a live tournament with active players, set it back to every 5
+ * minutes in vercel.json.
  *
  * Auth: Vercel Cron sends `Authorization: Bearer $CRON_SECRET`. We verify
  * that header matches the env var. Manual triggering with the same header
